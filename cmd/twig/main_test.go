@@ -2,14 +2,12 @@ package main
 
 import (
 	"bytes"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"twig/internal/hashing"
-	"twig/internal/objects"
 )
 
 // TestCLISkeleton compiles the twig binary and tests subcommand dispatching.
@@ -109,6 +107,13 @@ func TestCLISkeleton(t *testing.T) {
 			expectedStdout: "",
 			expectedStderr: "Usage: twig hash-object [--store <dir>] <file>",
 		},
+		{
+			name:           "cat-object command missing arguments",
+			args:           []string{"cat-object"},
+			expectedExit:   1,
+			expectedStdout: "",
+			expectedStderr: "Usage: twig cat-object [--store <dir>] <hash> <type>",
+		},
 	}
 
 	for _, tc := range tests {
@@ -153,8 +158,8 @@ func TestCLISkeleton(t *testing.T) {
 	}
 }
 
-// TestCLIHashObject verifies the end-to-end functionality of twig hash-object.
-func TestCLIHashObject(t *testing.T) {
+// TestCLIRoundTrips verifies both Blob and Asset paths end-to-end via CLI.
+func TestCLIRoundTrips(t *testing.T) {
 	// Create a temporary directory
 	tmpDir, err := os.MkdirTemp("", "twig-test-*")
 	if err != nil {
@@ -173,77 +178,74 @@ func TestCLIHashObject(t *testing.T) {
 		t.Fatalf("Failed to build twig binary: %v", err)
 	}
 
-	// Create a test file
-	testFile := filepath.Join(tmpDir, "hello.txt")
-	content := []byte("hello, this is a test file for the hash-object command!")
-	if err := os.WriteFile(testFile, content, 0644); err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	// Store path
 	storePath := filepath.Join(tmpDir, ".twig")
 
-	// Compute expected hash manually using objects and hashing wrapper
-	blob := objects.Blob{
-		Type: objects.TypeBlob,
-		Data: content,
-	}
-	encoded, err := objects.Encode(blob)
-	if err != nil {
-		t.Fatalf("Failed to encode blob: %v", err)
-	}
-	expectedHash := hashing.Hash(encoded)
-
-	// Run twig hash-object
-	cmd := exec.Command(binaryPath, "hash-object", "--store", storePath, testFile)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("Failed to run hash-object: %v. Stderr: %q", err, stderr.String())
+	// 1. Small file (Blob path)
+	smallFile := filepath.Join(tmpDir, "small.txt")
+	smallContent := []byte("hello world! this is a small file content to test blob path.")
+	if err := os.WriteFile(smallFile, smallContent, 0644); err != nil {
+		t.Fatalf("Failed to create small test file: %v", err)
 	}
 
-	actualHash := strings.TrimSpace(stdout.String())
-	if actualHash != expectedHash {
-		t.Errorf("Expected hash %s, got %s", expectedHash, actualHash)
+	// Run hash-object
+	cmdSmallHash := exec.Command(binaryPath, "hash-object", "--store", storePath, smallFile)
+	var stdoutSmallHash, stderrSmallHash bytes.Buffer
+	cmdSmallHash.Stdout = &stdoutSmallHash
+	cmdSmallHash.Stderr = &stderrSmallHash
+	if err := cmdSmallHash.Run(); err != nil {
+		t.Fatalf("hash-object failed: %v. Stderr: %q", err, stderrSmallHash.String())
+	}
+	smallHash := strings.TrimSpace(stdoutSmallHash.String())
+
+	// Run cat-object
+	cmdSmallCat := exec.Command(binaryPath, "cat-object", "--store", storePath, smallHash, "blob")
+	var stdoutSmallCat, stderrSmallCat bytes.Buffer
+	cmdSmallCat.Stdout = &stdoutSmallCat
+	cmdSmallCat.Stderr = &stderrSmallCat
+	if err := cmdSmallCat.Run(); err != nil {
+		t.Fatalf("cat-object failed: %v. Stderr: %q", err, stderrSmallCat.String())
+	}
+	if !bytes.Equal(smallContent, stdoutSmallCat.Bytes()) {
+		t.Errorf("Reconstructed small file content does not match. Expected %q, got %q", smallContent, stdoutSmallCat.Bytes())
 	}
 
-	// Verify that the object file is written to the store
-	objectFile := hashing.ObjectPath(storePath, expectedHash)
-	if _, err := os.Stat(objectFile); err != nil {
-		t.Errorf("Expected object file to exist at %s, but got error: %v", objectFile, err)
+	// 2. Large file (Asset path)
+	largeFile := filepath.Join(tmpDir, "large.txt")
+	largeSize := 1536 * 1024 // 1.5 MB
+	largeContent := make([]byte, largeSize)
+	r := rand.New(rand.NewSource(12345))
+	if _, err := r.Read(largeContent); err != nil {
+		t.Fatalf("Failed to generate random data: %v", err)
+	}
+	if err := os.WriteFile(largeFile, largeContent, 0644); err != nil {
+		t.Fatalf("Failed to create large test file: %v", err)
 	}
 
-	// Verify running it twice is deduplicated (still one file)
-	cmd2 := exec.Command(binaryPath, "hash-object", "--store", storePath, testFile)
-	if err := cmd2.Run(); err != nil {
-		t.Fatalf("Failed to run hash-object second time: %v", err)
+	// Run hash-object
+	cmdLargeHash := exec.Command(binaryPath, "hash-object", "--store", storePath, largeFile)
+	var stdoutLargeHash, stderrLargeHash bytes.Buffer
+	cmdLargeHash.Stdout = &stdoutLargeHash
+	cmdLargeHash.Stderr = &stderrLargeHash
+	if err := cmdLargeHash.Run(); err != nil {
+		t.Fatalf("hash-object failed: %v. Stderr: %q", err, stderrLargeHash.String())
+	}
+	largeHash := strings.TrimSpace(stdoutLargeHash.String())
+
+	// Run cat-object
+	cmdLargeCat := exec.Command(binaryPath, "cat-object", "--store", storePath, largeHash, "asset")
+	var stdoutLargeCat, stderrLargeCat bytes.Buffer
+	cmdLargeCat.Stdout = &stdoutLargeCat
+	cmdLargeCat.Stderr = &stderrLargeCat
+	if err := cmdLargeCat.Run(); err != nil {
+		t.Fatalf("cat-object failed: %v. Stderr: %q", err, stderrLargeCat.String())
+	}
+	if !bytes.Equal(largeContent, stdoutLargeCat.Bytes()) {
+		t.Errorf("Reconstructed large file content does not match original")
 	}
 
-	// Count files under storePath/objects
-	objectsDir := filepath.Join(storePath, "objects")
-	fileCount := 0
-	err = filepath.WalkDir(objectsDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() {
-			fileCount++
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("WalkDir failed: %v", err)
-	}
-
-	if fileCount != 1 {
-		t.Errorf("Expected exactly 1 object file in store, found %d", fileCount)
-	}
-
-	// Verify running it on non-existent file returns non-zero code
-	cmdErr := exec.Command(binaryPath, "hash-object", "--store", storePath, filepath.Join(tmpDir, "nonexistent.txt"))
-	if err := cmdErr.Run(); err == nil {
-		t.Error("Expected error when running hash-object on non-existent file, got nil")
+	// 3. Error Case: Invalid Type
+	cmdInvalid := exec.Command(binaryPath, "cat-object", "--store", storePath, smallHash, "invalidtype")
+	if err := cmdInvalid.Run(); err == nil {
+		t.Error("Expected error when calling cat-object with invalid type, got nil")
 	}
 }

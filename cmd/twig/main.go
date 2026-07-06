@@ -16,6 +16,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  status       Show the working tree status")
 	fmt.Fprintln(os.Stderr, "  branch       List, create, or delete branches")
 	fmt.Fprintln(os.Stderr, "  hash-object  Compute object ID and optionally create a blob from a file")
+	fmt.Fprintln(os.Stderr, "  cat-object   Provide content of repository objects")
 }
 
 func main() {
@@ -41,6 +42,8 @@ func main() {
 		runBranch()
 	case "hash-object":
 		runHashObject()
+	case "cat-object":
+		runCatObject()
 	default:
 		printUsage()
 		os.Exit(1)

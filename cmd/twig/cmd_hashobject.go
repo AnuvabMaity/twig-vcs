@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"twig/internal/objects"
+	"twig/internal/ingest"
 	"twig/internal/store"
 )
 
@@ -32,23 +32,6 @@ func runHashObject() {
 	}
 
 	filePath := args[0]
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading file %s: %v\n", filePath, err)
-		os.Exit(1)
-	}
-
-	// For Phase 1, we always wrap the content as a Blob
-	blob := objects.Blob{
-		Type: objects.TypeBlob,
-		Data: data,
-	}
-
-	encoded, err := objects.Encode(blob)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error encoding blob: %v\n", err)
-		os.Exit(1)
-	}
 
 	s := store.Open(*storeDir)
 	if err := s.EnsureLayout(); err != nil {
@@ -56,9 +39,9 @@ func runHashObject() {
 		os.Exit(1)
 	}
 
-	hash, err := s.Put(encoded)
+	hash, _, err := ingest.IngestFile(s, filePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error storing object: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error ingesting file %s: %v\n", filePath, err)
 		os.Exit(1)
 	}
 

@@ -75,6 +75,3 @@ func runBranch() {
 	fmt.Println("branch: not implemented")
 }
 
-func runHashObject() {
-	fmt.Println("hash-object: not implemented")
-}

@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,8 @@ import (
 
 	"twig/internal/index"
 	"twig/internal/ingest"
+	"twig/internal/objects"
+	"twig/internal/refs"
 	"twig/internal/store"
 )
 
@@ -137,3 +140,80 @@ func (r *Repo) addSingleFile(idx *index.Index, absPath string, normalizedPath st
 	})
 	return nil
 }
+
+// ErrNothingToCommit is returned when there are no changes staged since the last commit.
+var ErrNothingToCommit = errors.New("nothing to commit")
+
+// Commit builds a Tree from the repo's current index, builds a Commit
+// object whose parent is the current HEAD commit (if any — none for the
+// first commit), and updates the current branch ref to point at the new
+// commit. Returns ErrNothingToCommit if the resulting root tree hash is
+// identical to HEAD's current tree hash (i.e., nothing staged has
+// changed since the last commit).
+func (r *Repo) Commit(message string) (commitHash string, err error) {
+	indexPath := filepath.Join(r.TwigDir, objects.IndexFileName)
+	idx, err := index.Load(indexPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to load index: %w", err)
+	}
+
+	rootTreeHash, err := BuildTree(r.Store, idx.Entries)
+	if err != nil {
+		return "", fmt.Errorf("failed to build tree: %w", err)
+	}
+
+	var parents []string
+	headCommitHash, err := refs.ResolveHEAD(r.TwigDir)
+	if err != nil {
+		if !errors.Is(err, refs.ErrUnbornBranch) {
+			return "", fmt.Errorf("failed to resolve HEAD: %w", err)
+		}
+	} else {
+		parents = []string{headCommitHash}
+	}
+
+	if len(parents) > 0 {
+		parentCommitBytes, err := r.Store.Get(headCommitHash)
+		if err != nil {
+			return "", fmt.Errorf("failed to retrieve parent commit: %w", err)
+		}
+
+		var parentCommit objects.Commit
+		if err := objects.Decode(parentCommitBytes, &parentCommit); err != nil {
+			return "", fmt.Errorf("failed to decode parent commit: %w", err)
+		}
+
+		if parentCommit.Root == rootTreeHash {
+			return "", ErrNothingToCommit
+		}
+	}
+
+	configPath := filepath.Join(r.TwigDir, objects.ConfigFileName)
+	authorID, err := objects.ResolveAuthorID(configPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve committer identity: %w", err)
+	}
+
+	commitHash, err = BuildCommit(r.Store, rootTreeHash, parents, authorID, message)
+	if err != nil {
+		return "", fmt.Errorf("failed to build commit object: %w", err)
+	}
+
+	target, isBranch, err := refs.ReadHEAD(r.TwigDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to read HEAD state: %w", err)
+	}
+
+	if isBranch {
+		if err := refs.WriteBranch(r.TwigDir, target, commitHash); err != nil {
+			return "", fmt.Errorf("failed to update branch ref %s: %w", target, err)
+		}
+	} else {
+		if err := refs.WriteHEADDetached(r.TwigDir, commitHash); err != nil {
+			return "", fmt.Errorf("failed to update detached HEAD: %w", err)
+		}
+	}
+
+	return commitHash, nil
+}
+

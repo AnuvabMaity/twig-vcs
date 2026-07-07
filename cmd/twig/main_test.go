@@ -68,16 +68,16 @@ func TestCLISkeleton(t *testing.T) {
 		{
 			name:           "commit command",
 			args:           []string{"commit"},
-			expectedExit:   0,
-			expectedStdout: "commit: not implemented",
-			expectedStderr: "",
+			expectedExit:   1,
+			expectedStdout: "",
+			expectedStderr: "Error: switch 'm' requires a value",
 		},
 		{
-			name:           "log command",
+			name:           "log command on unborn branch",
 			args:           []string{"log"},
-			expectedExit:   0,
-			expectedStdout: "log: not implemented",
-			expectedStderr: "",
+			expectedExit:   1,
+			expectedStdout: "",
+			expectedStderr: "Error: branch has no commits yet",
 		},
 		{
 			name:           "checkout command",
@@ -250,3 +250,113 @@ func TestCLIRoundTrips(t *testing.T) {
 		t.Error("Expected error when calling cat-object with invalid type, got nil")
 	}
 }
+
+// TestCLILog verifies init -> add -> commit -> log workflow end-to-end via CLI.
+func TestCLILog(t *testing.T) {
+	// Create a temporary directory
+	tmpDir, err := os.MkdirTemp("", "twig-cli-log-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	binaryPath := filepath.Join(tmpDir, "twig")
+	if os.PathSeparator == '\\' {
+		binaryPath += ".exe"
+	}
+
+	// Build the twig binary
+	buildCmd := exec.Command("go", "build", "-o", binaryPath)
+	if err := buildCmd.Run(); err != nil {
+		t.Fatalf("Failed to build twig binary: %v", err)
+	}
+
+	// Helper to run commands
+	runCmd := func(args ...string) (string, string, error) {
+		cmd := exec.Command(binaryPath, args...)
+		cmd.Dir = tmpDir
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		return stdout.String(), stderr.String(), err
+	}
+
+	// 1. Run log in uninitialized dir -> should fail
+	_, _, err = runCmd("log")
+	if err == nil {
+		t.Error("expected error running twig log in uninitialized dir")
+	}
+
+	// 2. Initialize repo
+	_, _, err = runCmd("init")
+	if err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+
+	// 3. Run log on unborn branch -> should exit with code 1 and error message
+	_, stderr, err := runCmd("log")
+	if err == nil {
+		t.Error("expected error running twig log on unborn branch")
+	}
+	if !strings.Contains(stderr, "Error: branch has no commits yet") {
+		t.Errorf("expected unborn branch error message, got: %q", stderr)
+	}
+
+	// Write mock config so commit doesn't fail on missing identity
+	configPath := filepath.Join(tmpDir, ".twig", "config")
+	if err := os.WriteFile(configPath, []byte("user.id = test-cli-user\n"), 0644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	// 4. Create and stage a file
+	filePath := filepath.Join(tmpDir, "hello.txt")
+	if err := os.WriteFile(filePath, []byte("hello"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	_, _, err = runCmd("add", "hello.txt")
+	if err != nil {
+		t.Fatalf("add failed: %v", err)
+	}
+
+	// 5. Commit
+	stdout, _, err := runCmd("commit", "-m", "first commit")
+	if err != nil {
+		t.Fatalf("commit failed: %v", err)
+	}
+	if !strings.Contains(stdout, "first commit") {
+		t.Errorf("expected commit message in stdout, got: %q", stdout)
+	}
+
+	// 6. Create another commit
+	filePath2 := filepath.Join(tmpDir, "world.txt")
+	if err := os.WriteFile(filePath2, []byte("world"), 0644); err != nil {
+		t.Fatalf("failed to write file2: %v", err)
+	}
+	_, _, err = runCmd("add", "world.txt")
+	if err != nil {
+		t.Fatalf("add 2 failed: %v", err)
+	}
+
+	_, _, err = runCmd("commit", "-m", "second commit")
+	if err != nil {
+		t.Fatalf("commit 2 failed: %v", err)
+	}
+
+	// 7. Run log and verify output
+	stdout, _, err = runCmd("log")
+	if err != nil {
+		t.Fatalf("log failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "second commit") || !strings.Contains(stdout, "first commit") {
+		t.Errorf("log output missing expected commit messages: %q", stdout)
+	}
+	if !strings.Contains(stdout, "Author: test-cli-user") {
+		t.Errorf("log output missing Author: %q", stdout)
+	}
+	if !strings.Contains(stdout, "commit ") {
+		t.Errorf("log output missing commit hash markers: %q", stdout)
+	}
+}
+

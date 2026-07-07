@@ -51,13 +51,7 @@ func main() {
 }
 
 
-func runCommit() {
-	fmt.Println("commit: not implemented")
-}
 
-func runLog() {
-	fmt.Println("log: not implemented")
-}
 
 func runCheckout() {
 	fmt.Println("checkout: not implemented")

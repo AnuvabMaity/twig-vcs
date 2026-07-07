@@ -50,13 +50,6 @@ func main() {
 	}
 }
 
-func runInit() {
-	fmt.Println("init: not implemented")
-}
-
-func runAdd() {
-	fmt.Println("add: not implemented")
-}
 
 func runCommit() {
 	fmt.Println("commit: not implemented")
@@ -77,4 +70,3 @@ func runStatus() {
 func runBranch() {
 	fmt.Println("branch: not implemented")
 }
-

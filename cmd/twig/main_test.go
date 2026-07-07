@@ -55,15 +55,15 @@ func TestCLISkeleton(t *testing.T) {
 			name:           "init command",
 			args:           []string{"init"},
 			expectedExit:   0,
-			expectedStdout: "init: not implemented",
+			expectedStdout: "Initialized empty Twig repository in ./.twig/",
 			expectedStderr: "",
 		},
 		{
 			name:           "add command",
 			args:           []string{"add"},
-			expectedExit:   0,
-			expectedStdout: "add: not implemented",
-			expectedStderr: "",
+			expectedExit:   1,
+			expectedStdout: "",
+			expectedStderr: "Usage: twig add <path> [<path>...]",
 		},
 		{
 			name:           "commit command",
@@ -119,6 +119,7 @@ func TestCLISkeleton(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := exec.Command(binaryPath, tc.args...)
+			cmd.Dir = tmpDir
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout = &stdout
 			cmd.Stderr = &stderr

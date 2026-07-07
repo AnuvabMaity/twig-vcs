@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync/atomic"
 
 	"twig/internal/chunker"
+	"twig/internal/hashing"
 	"twig/internal/objects"
 	"twig/internal/store"
 )
@@ -147,3 +149,78 @@ func Reconstruct(s *store.Store, hash string, objType objects.ObjectType, w io.W
 		return fmt.Errorf("unrecognized object type: %s", objType)
 	}
 }
+
+// HashFileCallCount is for test instrumentation only — never read or relied upon by production
+// code paths. Incremented on every call to HashFile.
+var HashFileCallCount atomic.Int64
+
+// HashFile computes what IngestFile would produce (hash and object type)
+// for the file at path, without writing anything to the store. Used by
+// read-only commands (status) that need to detect content changes
+// without creating objects for content that may never be committed.
+func HashFile(path string) (hash string, objType objects.ObjectType, err error) {
+	HashFileCallCount.Add(1)
+	file, err := os.Open(path)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to open file %s: %w", path, err)
+	}
+	defer file.Close()
+
+	fi, err := file.Stat()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to stat file %s: %w", path, err)
+	}
+
+	size := fi.Size()
+	// Boundary is >= (16KB or larger is stored as an Asset, under 16KB is a Blob).
+	if size >= int64(objects.BlobThreshold) {
+		chunks, err := chunker.Split(file)
+		if err != nil {
+			return "", "", err
+		}
+
+		var chunkRefs []objects.ChunkRef
+		var totalSize uint64
+		for _, chunk := range chunks {
+			chunkHash := hashing.Hash(chunk)
+			chunkRefs = append(chunkRefs, objects.ChunkRef{
+				Hash: chunkHash,
+				Size: uint32(len(chunk)),
+			})
+			totalSize += uint64(len(chunk))
+		}
+
+		asset := objects.Asset{
+			Type:   objects.TypeAsset,
+			Size:   totalSize,
+			Chunks: chunkRefs,
+		}
+
+		encoded, err := objects.Encode(asset)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to encode asset: %w", err)
+		}
+
+		assetHash := hashing.Hash(encoded)
+		return assetHash, objects.TypeAsset, nil
+	}
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read file %s: %w", path, err)
+	}
+
+	blob := objects.Blob{
+		Type: objects.TypeBlob,
+		Data: data,
+	}
+
+	encoded, err := objects.Encode(blob)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to encode blob: %w", err)
+	}
+
+	blobHash := hashing.Hash(encoded)
+	return blobHash, objects.TypeBlob, nil
+}
+

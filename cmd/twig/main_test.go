@@ -90,7 +90,7 @@ func TestCLISkeleton(t *testing.T) {
 			name:           "status command",
 			args:           []string{"status"},
 			expectedExit:   0,
-			expectedStdout: "status: not implemented",
+			expectedStdout: "Untracked files:",
 			expectedStderr: "",
 		},
 		{
@@ -359,4 +359,3 @@ func TestCLILog(t *testing.T) {
 		t.Errorf("log output missing commit hash markers: %q", stdout)
 	}
 }
-

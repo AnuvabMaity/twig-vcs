@@ -89,3 +89,24 @@ func (idx *Index) Get(relPath string) (Entry, bool) {
 	e, ok := idx.Entries[relPath]
 	return e, ok
 }
+
+// NeedsRehash reports whether the file at path might have changed since
+// it was recorded in e, based only on a cheap os.Stat comparison of size
+// and modification time — no file content is read. A false result is a
+// strong signal the file is unchanged. A true result means the caller
+// should verify with a real content hash (e.g. ingest.HashFile) before
+// concluding anything actually changed.
+func NeedsRehash(path string, e Entry) (bool, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return false, err
+	}
+	if fi.Size() != e.Size {
+		return true, nil
+	}
+	if fi.ModTime().UnixNano() != e.ModTime {
+		return true, nil
+	}
+	return false, nil
+}
+

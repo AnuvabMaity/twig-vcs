@@ -50,14 +50,6 @@ func main() {
 	}
 }
 
-
-
-
-
-func runStatus() {
-	fmt.Println("status: not implemented")
-}
-
 func runBranch() {
 	fmt.Println("branch: not implemented")
 }

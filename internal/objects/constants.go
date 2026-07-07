@@ -12,3 +12,19 @@ const (
 
 // BlobThreshold defines the size boundary (16 KB) for storing files as Assets vs Blobs.
 const BlobThreshold = 16 * 1024 // 16 KB
+
+const (
+	DefaultTwigDir    = ".twig"   // repository metadata directory name (e.g. ".twig").
+	IndexFileName     = "index"   // name of the staging index file.
+	ConfigFileName    = "config"  // name of the repository config file.
+	HeadFileName      = "HEAD"    // symbolic reference tracking file.
+	VersionFileName   = "VERSION" // file containing the layout schema version.
+	ObjectsDirName    = "objects" // folder containing loose object databases.
+	RefsDirName       = "refs"    // directory containing references.
+	HeadsDirName      = "heads"   // subdirectory containing branch head refs.
+	DefaultBranchName = "main"    // default branch initialized in a new repo.
+
+	// Permissions
+	DirPermMode  = 0755
+	FilePermMode = 0644
+)

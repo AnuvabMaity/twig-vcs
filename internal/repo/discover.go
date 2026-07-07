@@ -4,6 +4,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+
+	"twig/internal/objects"
 )
 
 // ErrNotARepo is returned when no ".twig" directory is found walking up to the filesystem root.
@@ -21,7 +23,7 @@ func FindRoot(startDir string) (repoRoot string, twigDir string, err error) {
 	}
 
 	for {
-		candidate := filepath.Join(current, ".twig")
+		candidate := filepath.Join(current, objects.DefaultTwigDir)
 		fi, err := os.Stat(candidate)
 		if err == nil && fi.IsDir() {
 			return current, candidate, nil

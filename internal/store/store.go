@@ -8,6 +8,7 @@ import (
 
 	"twig/internal/compress"
 	"twig/internal/hashing"
+	"twig/internal/objects"
 )
 
 // Store represents a loose object, content-addressable key-value store.
@@ -26,8 +27,8 @@ func Open(twigDir string) *Store {
 // EnsureLayout creates the objects/ directory (and any other required
 // subdirectories) under twigDir if they don't already exist.
 func (s *Store) EnsureLayout() error {
-	objectsDir := filepath.Join(s.twigDir, "objects")
-	if err := os.MkdirAll(objectsDir, 0755); err != nil {
+	objectsDir := filepath.Join(s.twigDir, objects.ObjectsDirName)
+	if err := os.MkdirAll(objectsDir, objects.DirPermMode); err != nil {
 		return fmt.Errorf("failed to create objects directory: %w", err)
 	}
 	return nil

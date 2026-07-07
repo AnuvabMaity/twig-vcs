@@ -4,6 +4,8 @@ import (
 	"encoding/hex"
 	"path/filepath"
 
+	"twig/internal/objects"
+
 	"github.com/zeebo/blake3"
 )
 
@@ -18,9 +20,9 @@ func Hash(data []byte) string {
 // fan-out directory: <twigDir>/objects/<hash[:2]>/<hash[2:]>.
 func ObjectPath(twigDir, hash string) string {
 	if len(hash) < 2 {
-		return filepath.Join(twigDir, "objects", hash)
+		return filepath.Join(twigDir, objects.ObjectsDirName, hash)
 	}
 	prefix := hash[:2]
 	rest := hash[2:]
-	return filepath.Join(twigDir, "objects", prefix, rest)
+	return filepath.Join(twigDir, objects.ObjectsDirName, prefix, rest)
 }

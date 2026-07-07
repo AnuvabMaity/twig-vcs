@@ -217,3 +217,149 @@ func (r *Repo) Commit(message string) (commitHash string, err error) {
 	return commitHash, nil
 }
 
+// ErrWouldOverwriteChanges is returned when checkout would overwrite uncommitted local changes.
+var ErrWouldOverwriteChanges = errors.New("checkout would overwrite local changes")
+
+// Checkout resolves ref (a branch name, checked first, or else treated
+// as a raw commit hash) to a commit, walks its tree, and writes the
+// result into the repo's working directory. Before writing, for every
+// target file that already exists on disk, Checkout re-ingests it
+// (cheaply) and compares the resulting hash to what the index currently
+// has recorded for that path. If any file's on-disk content differs from
+// what the index last recorded, Checkout returns ErrWouldOverwriteChanges
+// listing the conflicting paths, unless force is true. On success, Checkout
+// updates HEAD: symbolically if ref matched a branch name, detached otherwise,
+// and also updates the index to match the new tree.
+func (r *Repo) Checkout(ref string, force bool) error {
+	// 1. Resolve ref to a commit hash
+	commitHash, err := refs.ReadBranch(r.TwigDir, ref)
+	isBranch := true
+	if err != nil {
+		commitHash = ref
+		isBranch = false
+	}
+
+	// Fast-path: check if we are already on this branch or detached commit
+	currTarget, currIsBranch, err := refs.ReadHEAD(r.TwigDir)
+	if err == nil {
+		if currIsBranch && isBranch && currTarget == ref {
+			return nil
+		}
+		if !currIsBranch && !isBranch && currTarget == commitHash {
+			return nil
+		}
+	}
+
+	// 2. Retrieve commit from store
+	commitBytes, err := r.Store.Get(commitHash)
+	if err != nil {
+		return fmt.Errorf("commit %s not found: %w", commitHash, err)
+	}
+
+	var commit objects.Commit
+	if err := objects.Decode(commitBytes, &commit); err != nil {
+		return fmt.Errorf("failed to decode commit %s: %w", commitHash, err)
+	}
+
+	// 3. Walk the target commit tree
+	files, err := WalkTree(r.Store, commit.Root)
+	if err != nil {
+		return fmt.Errorf("failed to walk tree: %w", err)
+	}
+
+	// 4. Load current index
+	indexPath := filepath.Join(r.TwigDir, objects.IndexFileName)
+	idx, err := index.Load(indexPath)
+	if err != nil {
+		return fmt.Errorf("failed to load index: %w", err)
+	}
+
+	// 5. Check for conflicts if force is false
+	if !force {
+		var conflicts []string
+		for _, tf := range files {
+			targetPath := filepath.Join(r.Root, filepath.FromSlash(tf.Path))
+			if _, err := os.Stat(targetPath); err == nil {
+				// Re-ingest the on-disk file
+				hash, _, err := ingest.IngestFile(r.Store, targetPath)
+				if err != nil {
+					return fmt.Errorf("failed to check on-disk file %s: %w", tf.Path, err)
+				}
+
+				entry, ok := idx.Get(tf.Path)
+				if !ok || entry.Hash != hash {
+					conflicts = append(conflicts, tf.Path)
+				}
+			}
+		}
+
+		if len(conflicts) > 0 {
+			return fmt.Errorf("%w: %v", ErrWouldOverwriteChanges, conflicts)
+		}
+	}
+
+	// 6. Write working directory
+	if err := WriteWorkingDir(r.Store, r.Root, files); err != nil {
+		return fmt.Errorf("failed to write working directory: %w", err)
+	}
+
+	// 7. Clean up files that are in the current index but not in the new tree
+	newFilesMap := make(map[string]bool)
+	for _, tf := range files {
+		newFilesMap[tf.Path] = true
+	}
+
+	for path := range idx.Entries {
+		if !newFilesMap[path] {
+			targetPath := filepath.Join(r.Root, filepath.FromSlash(path))
+			_ = os.Remove(targetPath)
+
+			// Clean up parent directory if empty
+			parentDir := filepath.Dir(targetPath)
+			for parentDir != r.Root {
+				if err := os.Remove(parentDir); err != nil {
+					break
+				}
+				parentDir = filepath.Dir(parentDir)
+			}
+		}
+	}
+
+	// 8. Update index to match the new tree exactly
+	newIdx := &index.Index{
+		Entries: make(map[string]index.Entry),
+	}
+	for _, tf := range files {
+		targetPath := filepath.Join(r.Root, filepath.FromSlash(tf.Path))
+		fi, err := os.Stat(targetPath)
+		if err != nil {
+			return fmt.Errorf("failed to stat written file %s: %w", tf.Path, err)
+		}
+
+		newIdx.Put(tf.Path, index.Entry{
+			Hash:    tf.Hash,
+			Type:    tf.Type,
+			Size:    fi.Size(),
+			ModTime: fi.ModTime().UnixNano(),
+		})
+	}
+
+	if err := newIdx.Save(indexPath); err != nil {
+		return fmt.Errorf("failed to save index: %w", err)
+	}
+
+	// 9. Update HEAD reference
+	if isBranch {
+		if err := refs.WriteHEAD(r.TwigDir, ref); err != nil {
+			return fmt.Errorf("failed to update HEAD symbolic ref: %w", err)
+		}
+	} else {
+		if err := refs.WriteHEADDetached(r.TwigDir, commitHash); err != nil {
+			return fmt.Errorf("failed to update HEAD detached: %w", err)
+		}
+	}
+
+	return nil
+}
+
+

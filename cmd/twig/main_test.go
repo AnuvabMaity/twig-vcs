@@ -82,9 +82,9 @@ func TestCLISkeleton(t *testing.T) {
 		{
 			name:           "checkout command",
 			args:           []string{"checkout"},
-			expectedExit:   0,
-			expectedStdout: "checkout: not implemented",
-			expectedStderr: "",
+			expectedExit:   1,
+			expectedStdout: "",
+			expectedStderr: "Usage: twig checkout [--force] <ref>",
 		},
 		{
 			name:           "status command",

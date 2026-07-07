@@ -53,9 +53,6 @@ func main() {
 
 
 
-func runCheckout() {
-	fmt.Println("checkout: not implemented")
-}
 
 func runStatus() {
 	fmt.Println("status: not implemented")

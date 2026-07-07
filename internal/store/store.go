@@ -80,10 +80,13 @@ func (s *Store) Put(content []byte) (string, error) {
 	}
 	tempName := tempFile.Name()
 	var tempClosed bool
+	var success bool
 	defer func() {
-		// Clean up the temp file if we fail before renaming it
-		if !tempClosed {
-			tempFile.Close()
+		// Clean up the temp file if we fail before renaming it successfully
+		if !success {
+			if !tempClosed {
+				tempFile.Close()
+			}
 			os.Remove(tempName)
 		}
 	}()
@@ -104,6 +107,7 @@ func (s *Store) Put(content []byte) (string, error) {
 	if err := os.Rename(tempName, path); err != nil {
 		return "", fmt.Errorf("failed to rename temp file to object path: %w", err)
 	}
+	success = true
 
 	return hash, nil
 }

@@ -77,10 +77,8 @@ func IngestFile(s *store.Store, path string) (string, objects.ObjectType, error)
 		return hash, objects.TypeAsset, nil
 	}
 
-	// Read small file into memory
-	data := make([]byte, size)
-	_, err = io.ReadFull(file, data)
-	if err != nil && err != io.EOF && size > 0 {
+	data, err := io.ReadAll(file)
+	if err != nil {
 		return "", "", fmt.Errorf("failed to read file %s: %w", path, err)
 	}
 

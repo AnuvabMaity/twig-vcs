@@ -106,3 +106,61 @@ func TestRefsLifecycle(t *testing.T) {
 		t.Errorf("expected symbolic switch to feature-branch, got isBranch=%t target=%q", isBranch, target)
 	}
 }
+
+func TestListBranches(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "twig-refs-list-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	twigDir := filepath.Join(tmpDir, ".twig")
+	if err := os.MkdirAll(filepath.Join(twigDir, refsDirName, headsDirName), 0755); err != nil {
+		t.Fatalf("failed to create refs dir: %v", err)
+	}
+
+	// 1. Initially empty listing
+	branches, err := ListBranches(twigDir)
+	if err != nil {
+		t.Fatalf("ListBranches failed: %v", err)
+	}
+	if len(branches) != 0 {
+		t.Errorf("expected 0 branches, got %d", len(branches))
+	}
+
+	// 2. Create branches
+	if err := WriteBranch(twigDir, "main", "hash1"); err != nil {
+		t.Fatalf("failed to write main branch: %v", err)
+	}
+	if err := WriteBranch(twigDir, "feature/abc", "hash2"); err != nil {
+		t.Fatalf("failed to write nested branch: %v", err)
+	}
+
+	branches, err = ListBranches(twigDir)
+	if err != nil {
+		t.Fatalf("ListBranches failed: %v", err)
+	}
+
+	if len(branches) != 2 {
+		t.Fatalf("expected 2 branches, got %d: %v", len(branches), branches)
+	}
+
+	hasMain := false
+	hasNested := false
+	for _, b := range branches {
+		if b == "main" {
+			hasMain = true
+		}
+		if b == "feature/abc" {
+			hasNested = true
+		}
+	}
+
+	if !hasMain {
+		t.Error("expected list to contain 'main'")
+	}
+	if !hasNested {
+		t.Error("expected list to contain 'feature/abc'")
+	}
+}
+

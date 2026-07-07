@@ -3,6 +3,7 @@ package refs
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,4 +112,34 @@ func WriteBranch(twigDir, name, commitHash string) error {
 		return fmt.Errorf("failed to write branch ref file: %w", err)
 	}
 	return nil
+}
+
+// ListBranches returns the names of every existing branch (i.e. every
+// file under refs/heads/), in no particular guaranteed order.
+func ListBranches(twigDir string) ([]string, error) {
+	headsDir := filepath.Join(twigDir, refsDirName, headsDirName)
+	var branches []string
+	err := filepath.WalkDir(headsDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		// Calculate the relative path from headsDir to get the branch name
+		rel, err := filepath.Rel(headsDir, path)
+		if err != nil {
+			return err
+		}
+		// Convert separators to forward slashes for branch names with path components
+		branches = append(branches, filepath.ToSlash(rel))
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list branches: %w", err)
+	}
+	return branches, nil
 }

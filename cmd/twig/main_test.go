@@ -97,7 +97,7 @@ func TestCLISkeleton(t *testing.T) {
 			name:           "branch command",
 			args:           []string{"branch"},
 			expectedExit:   0,
-			expectedStdout: "branch: not implemented",
+			expectedStdout: "",
 			expectedStderr: "",
 		},
 		{

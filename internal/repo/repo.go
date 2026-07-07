@@ -157,6 +157,13 @@ func (r *Repo) Commit(message string) (commitHash string, err error) {
 		return "", fmt.Errorf("failed to load index: %w", err)
 	}
 
+	// Block commit if there are unresolved conflicts
+	for _, entry := range idx.Entries {
+		if entry.Conflict != nil {
+			return "", ErrMergeConflicts
+		}
+	}
+
 	rootTreeHash, err := BuildTree(r.Store, idx.Entries)
 	if err != nil {
 		return "", fmt.Errorf("failed to build tree: %w", err)
@@ -172,6 +179,15 @@ func (r *Repo) Commit(message string) (commitHash string, err error) {
 		parents = []string{headCommitHash}
 	}
 
+	// Read second parent if MERGE_HEAD exists
+	mergeHeadPath := filepath.Join(r.TwigDir, "MERGE_HEAD")
+	if mergeHeadBytes, err := os.ReadFile(mergeHeadPath); err == nil {
+		mergeHead := strings.TrimSpace(string(mergeHeadBytes))
+		if mergeHead != "" {
+			parents = append(parents, mergeHead)
+		}
+	}
+
 	if len(parents) > 0 {
 		parentCommitBytes, err := r.Store.Get(headCommitHash)
 		if err != nil {
@@ -183,7 +199,7 @@ func (r *Repo) Commit(message string) (commitHash string, err error) {
 			return "", fmt.Errorf("failed to decode parent commit: %w", err)
 		}
 
-		if parentCommit.Root == rootTreeHash {
+		if len(parents) == 1 && parentCommit.Root == rootTreeHash {
 			return "", ErrNothingToCommit
 		}
 	}
@@ -213,6 +229,9 @@ func (r *Repo) Commit(message string) (commitHash string, err error) {
 			return "", fmt.Errorf("failed to update detached HEAD: %w", err)
 		}
 	}
+
+	// Clean up MERGE_HEAD
+	_ = os.Remove(mergeHeadPath)
 
 	return commitHash, nil
 }
@@ -359,7 +378,33 @@ func (r *Repo) Checkout(ref string, force bool) error {
 		}
 	}
 
+	// Clean up MERGE_HEAD since we successfully checked out a branch/commit (merge aborted/completed)
+	_ = os.Remove(filepath.Join(r.TwigDir, "MERGE_HEAD"))
+
 	return nil
 }
 
+// ErrBranchExists is returned when attempting to create a branch that already exists.
+var ErrBranchExists = errors.New("branch already exists")
 
+// CreateBranch creates a new branch ref named name, pointing at the
+// current HEAD commit. Returns refs.ErrUnbornBranch if there is no
+// commit yet to point at, and ErrBranchExists if a branch with this
+// name already exists.
+func (r *Repo) CreateBranch(name string) error {
+	_, err := refs.ReadBranch(r.TwigDir, name)
+	if err == nil {
+		return ErrBranchExists
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to check existing branch: %w", err)
+	}
+	commitHash, err := refs.ResolveHEAD(r.TwigDir)
+	if err != nil {
+		return err // e.g. refs.ErrUnbornBranch
+	}
+	if err := refs.WriteBranch(r.TwigDir, name, commitHash); err != nil {
+		return fmt.Errorf("failed to write new branch: %w", err)
+	}
+	return nil
+}

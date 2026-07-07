@@ -40,6 +40,7 @@ func runStatus() {
 	}
 
 	var staged []string
+	var unmerged []string
 	var notStaged []string
 	var untracked []string
 
@@ -49,6 +50,8 @@ func runStatus() {
 			staged = append(staged, fmt.Sprintf("\tnew file:   %s", entry.Path))
 		case repo.StatusStagedModified:
 			staged = append(staged, fmt.Sprintf("\tmodified:   %s", entry.Path))
+		case repo.StatusConflict:
+			unmerged = append(unmerged, fmt.Sprintf("\tboth modified:      %s", entry.Path))
 		case repo.StatusModified:
 			notStaged = append(notStaged, fmt.Sprintf("\tmodified:   %s", entry.Path))
 		case repo.StatusDeleted:
@@ -59,6 +62,17 @@ func runStatus() {
 	}
 
 	hasOutput := false
+
+	if len(unmerged) > 0 {
+		fmt.Println("Unmerged paths:")
+		fmt.Println("  (use \"twig resolve <--ours|--theirs> <file>\" to resolve conflicts)")
+		fmt.Println()
+		for _, line := range unmerged {
+			fmt.Println(line)
+		}
+		fmt.Println()
+		hasOutput = true
+	}
 
 	if len(staged) > 0 {
 		fmt.Println("Changes to be committed:")

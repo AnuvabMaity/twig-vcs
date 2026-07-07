@@ -9,12 +9,21 @@ import (
 	"twig/internal/objects"
 )
 
+// Conflict represents ours/theirs candidates for a conflicted path.
+type Conflict struct {
+	OursHash   string             `cbor:"ours_hash"`
+	OursType   objects.ObjectType `cbor:"ours_type"`
+	TheirsHash string             `cbor:"theirs_hash"`
+	TheirsType objects.ObjectType `cbor:"theirs_type"`
+}
+
 // Entry represents a staged file metadata entry in the index.
 type Entry struct {
-	Hash    string             `cbor:"hash"`
-	Type    objects.ObjectType `cbor:"type"`  // TypeBlob or TypeAsset
-	Size    int64              `cbor:"size"`
-	ModTime int64              `cbor:"mtime"` // UnixNano of the file's mtime at add-time
+	Hash     string             `cbor:"hash"`
+	Type     objects.ObjectType `cbor:"type"`  // TypeBlob or TypeAsset
+	Size     int64              `cbor:"size"`
+	ModTime  int64              `cbor:"mtime"` // UnixNano of the file's mtime at add-time
+	Conflict *Conflict          `cbor:"conflict,omitempty"`
 }
 
 // Index represents the staging area state.

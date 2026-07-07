@@ -24,6 +24,7 @@ const (
 	StatusStagedNew      FileStatus = "staged-new"       // in the index, not present in HEAD's tree
 	StatusStagedModified FileStatus = "staged-modified"  // in the index, present in HEAD's tree, but with a different hash
 	StatusUnmodified     FileStatus = "unmodified"       // identical across working dir, index, and HEAD
+	StatusConflict       FileStatus = "conflict"         // has conflict markers in the index
 )
 
 // StatusEntry records the status of a specific file path.
@@ -134,6 +135,11 @@ func (r *Repo) Status() ([]StatusEntry, error) {
 		}
 
 		// File is in index
+		if idxEntry.Conflict != nil {
+			entries = append(entries, StatusEntry{Path: p, Status: StatusConflict})
+			continue
+		}
+
 		isStagedChange := false
 		isWorkdirChange := false
 

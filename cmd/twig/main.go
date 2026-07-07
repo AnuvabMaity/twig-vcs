@@ -14,7 +14,8 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  log          Show commit history")
 	fmt.Fprintln(os.Stderr, "  checkout     Switch branches or restore working tree files")
 	fmt.Fprintln(os.Stderr, "  status       Show the working tree status")
-	fmt.Fprintln(os.Stderr, "  branch       List, create, or delete branches")
+	fmt.Fprintln(os.Stderr, "  merge        Join two or more development histories together")
+	fmt.Fprintln(os.Stderr, "  resolve      Resolve merge conflicts in staging index and working copy")
 	fmt.Fprintln(os.Stderr, "  hash-object  Compute object ID and optionally create a blob from a file")
 	fmt.Fprintln(os.Stderr, "  cat-object   Provide content of repository objects")
 }
@@ -40,6 +41,10 @@ func main() {
 		runStatus()
 	case "branch":
 		runBranch()
+	case "merge":
+		runMerge()
+	case "resolve":
+		runResolve()
 	case "hash-object":
 		runHashObject()
 	case "cat-object":
@@ -48,8 +53,4 @@ func main() {
 		printUsage()
 		os.Exit(1)
 	}
-}
-
-func runBranch() {
-	fmt.Println("branch: not implemented")
 }

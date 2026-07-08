@@ -189,4 +189,3 @@ func TestWriteWorkingDir(t *testing.T) {
 		t.Errorf("reconstructed large content mismatch")
 	}
 }
-

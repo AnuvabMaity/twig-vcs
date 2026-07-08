@@ -951,4 +951,3 @@ func TestMergeIntegration(t *testing.T) {
 		t.Error("expected MERGE_HEAD file to be removed after successful commit")
 	}
 }
-

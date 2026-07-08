@@ -163,4 +163,3 @@ func TestListBranches(t *testing.T) {
 		t.Error("expected list to contain 'feature/abc'")
 	}
 }
-

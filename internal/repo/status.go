@@ -20,11 +20,11 @@ type FileStatus string
 const (
 	StatusUntracked      FileStatus = "untracked"       // on disk, not in the index at all
 	StatusModified       FileStatus = "modified"        // in the index, but working-dir content has changed since it was staged
-	StatusDeleted        FileStatus = "deleted"          // in the index, but missing from disk
-	StatusStagedNew      FileStatus = "staged-new"       // in the index, not present in HEAD's tree
-	StatusStagedModified FileStatus = "staged-modified"  // in the index, present in HEAD's tree, but with a different hash
-	StatusUnmodified     FileStatus = "unmodified"       // identical across working dir, index, and HEAD
-	StatusConflict       FileStatus = "conflict"         // has conflict markers in the index
+	StatusDeleted        FileStatus = "deleted"         // in the index, but missing from disk
+	StatusStagedNew      FileStatus = "staged-new"      // in the index, not present in HEAD's tree
+	StatusStagedModified FileStatus = "staged-modified" // in the index, present in HEAD's tree, but with a different hash
+	StatusUnmodified     FileStatus = "unmodified"      // identical across working dir, index, and HEAD
+	StatusConflict       FileStatus = "conflict"        // has conflict markers in the index
 )
 
 // StatusEntry records the status of a specific file path.

@@ -223,4 +223,3 @@ func TestPhase4Integration(t *testing.T) {
 		t.Errorf("entry 1 invalid: %+v", entries[1])
 	}
 }
-

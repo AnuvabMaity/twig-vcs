@@ -223,4 +223,3 @@ func HashFile(path string) (hash string, objType objects.ObjectType, err error) 
 	blobHash := hashing.Hash(encoded)
 	return blobHash, objects.TypeBlob, nil
 }
-

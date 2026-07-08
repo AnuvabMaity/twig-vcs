@@ -355,7 +355,9 @@ func (r *Repo) Merge(branchName string) error {
 
 		if !oursChanged && theirsChanged {
 			if theirsDeleted {
-				_ = os.Remove(absPath)
+				if err := os.Remove(absPath); err != nil && !os.IsNotExist(err) {
+					return fmt.Errorf("failed to remove file %s: %w", p, err)
+				}
 				idx.Remove(p)
 				cleanEmptyParents(r.Root, absPath)
 			} else {
@@ -587,7 +589,9 @@ func (r *Repo) ResolveConflict(path string, side string) error {
 
 	if chosenHash == "" {
 		// Side deleted the file: remove from working directory and index
-		_ = os.Remove(absWDPath)
+		if err := os.Remove(absWDPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove file %s: %w", normalizedPath, err)
+		}
 		cleanEmptyParents(r.Root, absWDPath)
 		idx.Remove(normalizedPath)
 	} else if side == "ours" {

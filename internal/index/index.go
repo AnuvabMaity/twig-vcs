@@ -20,7 +20,7 @@ type Conflict struct {
 // Entry represents a staged file metadata entry in the index.
 type Entry struct {
 	Hash     string             `cbor:"hash"`
-	Type     objects.ObjectType `cbor:"type"`  // TypeBlob or TypeAsset
+	Type     objects.ObjectType `cbor:"type"` // TypeBlob or TypeAsset
 	Size     int64              `cbor:"size"`
 	ModTime  int64              `cbor:"mtime"` // UnixNano of the file's mtime at add-time
 	Conflict *Conflict          `cbor:"conflict,omitempty"`
@@ -118,4 +118,3 @@ func NeedsRehash(path string, e Entry) (bool, error) {
 	}
 	return false, nil
 }
-

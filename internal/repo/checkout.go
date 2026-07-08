@@ -13,7 +13,7 @@ import (
 
 // TreeFile is one resolved file within a walked tree.
 type TreeFile struct {
-	Path string             // relative to repo root, forward-slash separated
+	Path string // relative to repo root, forward-slash separated
 	Hash string
 	Type objects.ObjectType // TypeBlob or TypeAsset (never TypeTree — those are traversed, not returned)
 }
@@ -99,4 +99,3 @@ func WriteWorkingDir(s *store.Store, root string, files []TreeFile) error {
 	}
 	return nil
 }
-

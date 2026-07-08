@@ -231,7 +231,9 @@ func (r *Repo) Commit(message string) (commitHash string, err error) {
 	}
 
 	// Clean up MERGE_HEAD
-	_ = os.Remove(mergeHeadPath)
+	if err := os.Remove(mergeHeadPath); err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("failed to clean up MERGE_HEAD: %w", err)
+	}
 
 	return commitHash, nil
 }
@@ -299,15 +301,31 @@ func (r *Repo) Checkout(ref string, force bool) error {
 		for _, tf := range files {
 			targetPath := filepath.Join(r.Root, filepath.FromSlash(tf.Path))
 			if _, err := os.Stat(targetPath); err == nil {
-				// Re-ingest the on-disk file
-				hash, _, err := ingest.IngestFile(r.Store, targetPath)
-				if err != nil {
-					return fmt.Errorf("failed to check on-disk file %s: %w", tf.Path, err)
-				}
-
 				entry, ok := idx.Get(tf.Path)
-				if !ok || entry.Hash != hash {
-					conflicts = append(conflicts, tf.Path)
+				if !ok {
+					// Untracked on-disk file. Overwriting it would lose changes.
+					hash, _, err := ingest.HashFile(targetPath)
+					if err != nil {
+						return fmt.Errorf("failed to check on-disk file %s: %w", tf.Path, err)
+					}
+					if hash != tf.Hash {
+						conflicts = append(conflicts, tf.Path)
+					}
+				} else {
+					// Tracked file. Compare using NeedsRehash fast-path first.
+					needsRehash, err := index.NeedsRehash(targetPath, entry)
+					if err != nil {
+						return fmt.Errorf("failed to check on-disk file %s: %w", tf.Path, err)
+					}
+					if needsRehash {
+						hash, _, err := ingest.HashFile(targetPath)
+						if err != nil {
+							return fmt.Errorf("failed to check on-disk file %s: %w", tf.Path, err)
+						}
+						if entry.Hash != hash {
+							conflicts = append(conflicts, tf.Path)
+						}
+					}
 				}
 			}
 		}
@@ -331,7 +349,9 @@ func (r *Repo) Checkout(ref string, force bool) error {
 	for path := range idx.Entries {
 		if !newFilesMap[path] {
 			targetPath := filepath.Join(r.Root, filepath.FromSlash(path))
-			_ = os.Remove(targetPath)
+			if err := os.Remove(targetPath); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("failed to remove obsolete file %s: %w", path, err)
+			}
 
 			// Clean up parent directory if empty
 			parentDir := filepath.Dir(targetPath)
@@ -379,7 +399,10 @@ func (r *Repo) Checkout(ref string, force bool) error {
 	}
 
 	// Clean up MERGE_HEAD since we successfully checked out a branch/commit (merge aborted/completed)
-	_ = os.Remove(filepath.Join(r.TwigDir, "MERGE_HEAD"))
+	mergeHeadPath := filepath.Join(r.TwigDir, "MERGE_HEAD")
+	if err := os.Remove(mergeHeadPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to clean up MERGE_HEAD: %w", err)
+	}
 
 	return nil
 }

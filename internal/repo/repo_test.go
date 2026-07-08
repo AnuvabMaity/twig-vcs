@@ -205,4 +205,3 @@ func TestRepoAddDirectory(t *testing.T) {
 		t.Errorf("expected exactly 3 staged entries, got %d: %+v", len(idx.Entries), idx.Entries)
 	}
 }
-

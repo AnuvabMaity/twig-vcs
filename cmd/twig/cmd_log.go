@@ -98,7 +98,7 @@ func resolveLogRef(twigDir string, input string) (string, error) {
 		if len(lowerInput) == 64 {
 			return lowerInput, nil
 		}
-		if len(lowerInput) >= 4 {
+		if len(lowerInput) >= 7 {
 			objectsDir := filepath.Join(twigDir, "objects")
 			prefixDir := lowerInput[:2]
 			restPrefix := lowerInput[2:]

@@ -65,7 +65,7 @@ func runCatIndex(args []string) {
 
 	fmt.Printf("Staging Index (%d files):\n", len(idx.Entries))
 	fmt.Printf("%-35s | %-6s | %-10s | %-20s | %-12s\n", "Path", "Type", "Size", "Mod Time", "Conflict")
-	fmt.Println(string(make([]byte, 95))) // separation line
+	fmt.Println("-----------------------------------------------------------------------------------------------") // separation line
 	for path, entry := range idx.Entries {
 		t := time.Unix(0, entry.ModTime).Format(time.RFC3339)
 		conflictStr := "No"

@@ -295,14 +295,16 @@ func (r *Repo) Checkout(ref string, force bool) error {
 		isBranch = false
 	}
 
-	// Fast-path: check if we are already on this branch or detached commit
-	currTarget, currIsBranch, err := refs.ReadHEAD(r.TwigDir)
-	if err == nil {
-		if currIsBranch && isBranch && currTarget == ref {
-			return nil
-		}
-		if !currIsBranch && !isBranch && currTarget == commitHash {
-			return nil
+	// Fast-path: check if we are already on this branch or detached commit (only if not forcing)
+	if !force {
+		currTarget, currIsBranch, err := refs.ReadHEAD(r.TwigDir)
+		if err == nil {
+			if currIsBranch && isBranch && currTarget == ref {
+				return nil
+			}
+			if !currIsBranch && !isBranch && currTarget == commitHash {
+				return nil
+			}
 		}
 	}
 

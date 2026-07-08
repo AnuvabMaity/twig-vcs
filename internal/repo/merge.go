@@ -214,6 +214,32 @@ func (e *MergeConflictsError) Is(target error) bool {
 	return target == ErrMergeConflicts
 }
 
+// AbortMerge resets the index and working directory to the current HEAD,
+// and removes the MERGE_HEAD state.
+func (r *Repo) AbortMerge() error {
+	mergeHeadPath := filepath.Join(r.TwigDir, "MERGE_HEAD")
+	if _, err := os.Stat(mergeHeadPath); os.IsNotExist(err) {
+		return fmt.Errorf("no merge in progress (MERGE_HEAD not found)")
+	}
+
+	// 1. Resolve current HEAD ref/commit
+	currTarget, _, err := refs.ReadHEAD(r.TwigDir)
+	if err != nil {
+		return fmt.Errorf("failed to read HEAD: %w", err)
+	}
+
+	// 2. Perform checkout of HEAD commit with force=true to restore index and working copy
+	err = r.Checkout(currTarget, true)
+	if err != nil {
+		return fmt.Errorf("failed to restore repository state: %w", err)
+	}
+
+	// Clean up MERGE_HEAD explicitly (just in case Checkout didn't do it)
+	_ = os.Remove(mergeHeadPath)
+
+	return nil
+}
+
 // Merge merges the named branch into the currently checked-out branch.
 func (r *Repo) Merge(branchName string) error {
 	// 1. Load staging index

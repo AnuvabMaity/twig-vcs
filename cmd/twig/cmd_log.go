@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"twig/internal/refs"
@@ -24,17 +25,29 @@ func runLog() {
 		os.Exit(1)
 	}
 
-	headCommitHash, err := refs.ResolveHEAD(r.TwigDir)
-	if err != nil {
-		if errors.Is(err, refs.ErrUnbornBranch) {
-			fmt.Fprintln(os.Stderr, "Error: branch has no commits yet")
+	var startCommit string
+	if len(os.Args) >= 3 {
+		targetRef := os.Args[2]
+		resolved, err := resolveLogRef(r.TwigDir, targetRef)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error resolving reference %q: %v\n", targetRef, err)
 			os.Exit(1)
 		}
-		fmt.Fprintf(os.Stderr, "Error resolving HEAD: %v\n", err)
-		os.Exit(1)
+		startCommit = resolved
+	} else {
+		headCommitHash, err := refs.ResolveHEAD(r.TwigDir)
+		if err != nil {
+			if errors.Is(err, refs.ErrUnbornBranch) {
+				fmt.Fprintln(os.Stderr, "Error: branch has no commits yet")
+				os.Exit(1)
+			}
+			fmt.Fprintf(os.Stderr, "Error resolving HEAD: %v\n", err)
+			os.Exit(1)
+		}
+		startCommit = headCommitHash
 	}
 
-	entries, err := r.Log(headCommitHash)
+	entries, err := r.Log(startCommit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error getting log: %v\n", err)
 		os.Exit(1)
@@ -60,4 +73,52 @@ func runLog() {
 			fmt.Printf("    %s\n", line)
 		}
 	}
+}
+
+func resolveLogRef(twigDir string, input string) (string, error) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return "", fmt.Errorf("ref cannot be empty")
+	}
+	if commitHash, err := refs.ReadBranch(twigDir, input); err == nil {
+		return commitHash, nil
+	}
+	if input == "HEAD" {
+		return refs.ResolveHEAD(twigDir)
+	}
+	isHex := true
+	for _, c := range input {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			isHex = false
+			break
+		}
+	}
+	if isHex {
+		lowerInput := strings.ToLower(input)
+		if len(lowerInput) == 64 {
+			return lowerInput, nil
+		}
+		if len(lowerInput) >= 4 {
+			objectsDir := filepath.Join(twigDir, "objects")
+			prefixDir := lowerInput[:2]
+			restPrefix := lowerInput[2:]
+			searchDir := filepath.Join(objectsDir, prefixDir)
+			files, err := os.ReadDir(searchDir)
+			if err == nil {
+				var matches []string
+				for _, f := range files {
+					if !f.IsDir() && strings.HasPrefix(strings.ToLower(f.Name()), restPrefix) {
+						matches = append(matches, prefixDir+f.Name())
+					}
+				}
+				if len(matches) == 1 {
+					return matches[0], nil
+				}
+				if len(matches) > 1 {
+					return "", fmt.Errorf("short hash %q is ambiguous", input)
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("reference not found")
 }

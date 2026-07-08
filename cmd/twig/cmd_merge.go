@@ -12,18 +12,12 @@ import (
 // runMerge implements the 'twig merge' subcommand.
 func runMerge() {
 	fs := flag.NewFlagSet("merge", flag.ExitOnError)
+	abort := fs.Bool("abort", false, "Abort the current merge process and restore the pre-merge state")
+
 	if err := fs.Parse(os.Args[2:]); err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing flags: %v\n", err)
 		os.Exit(1)
 	}
-
-	args := fs.Args()
-	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "Usage: twig merge <branch>")
-		os.Exit(1)
-	}
-
-	branchName := args[0]
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -36,6 +30,24 @@ func runMerge() {
 		fmt.Fprintf(os.Stderr, "Error opening repository: %v\n", err)
 		os.Exit(1)
 	}
+
+	if *abort {
+		err = r.AbortMerge()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error aborting merge: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Merge aborted successfully. Working copy and index restored to HEAD.")
+		return
+	}
+
+	args := fs.Args()
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "Usage: twig merge [--abort] | twig merge <branch>")
+		os.Exit(1)
+	}
+
+	branchName := args[0]
 
 	err = r.Merge(branchName)
 	if err != nil {

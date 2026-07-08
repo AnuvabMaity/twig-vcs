@@ -62,6 +62,41 @@ func (r *Repo) AddFile(relOrAbsPath string) error {
 
 	fi, err := os.Stat(absPath)
 	if err != nil {
+		if os.IsNotExist(err) || errors.Is(err, os.ErrNotExist) {
+			// If path does not exist, check if it or files under it are currently in the index.
+			// If so, stage the deletion by removing them from the index.
+			indexPath := filepath.Join(r.TwigDir, "index")
+			idx, errLoad := index.Load(indexPath)
+			if errLoad == nil {
+				normalizedPath := filepath.ToSlash(relPath)
+				removedAny := false
+
+				// Check direct file match
+				if _, exists := idx.Get(normalizedPath); exists {
+					idx.Remove(normalizedPath)
+					removedAny = true
+				} else {
+					// Check folder prefix match
+					dirPrefix := normalizedPath
+					if !strings.HasSuffix(dirPrefix, "/") {
+						dirPrefix += "/"
+					}
+					for entryPath := range idx.Entries {
+						if strings.HasPrefix(entryPath, dirPrefix) {
+							idx.Remove(entryPath)
+							removedAny = true
+						}
+					}
+				}
+
+				if removedAny {
+					if errSave := idx.Save(indexPath); errSave != nil {
+						return fmt.Errorf("failed to save index when staging deletion: %w", errSave)
+					}
+					return nil
+				}
+			}
+		}
 		return fmt.Errorf("failed to stat: %w", err)
 	}
 

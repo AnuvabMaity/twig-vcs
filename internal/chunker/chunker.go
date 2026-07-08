@@ -4,6 +4,7 @@ import (
 	"io"
 
 	"github.com/jotfs/fastcdc-go"
+	"twig/internal/metrics"
 	"twig/internal/objects"
 )
 
@@ -12,6 +13,9 @@ import (
 // order chunks appear in the source data.
 // Splitting an empty input does not panic and returns zero chunks.
 func Split(r io.Reader) ([][]byte, error) {
+	if metrics.Enabled {
+		metrics.ChunkerInvocations.Add(1)
+	}
 	opts := fastcdc.Options{
 		MinSize:     objects.ChunkMinSize,
 		AverageSize: objects.ChunkAvgSize,

@@ -8,6 +8,7 @@ import (
 
 	"twig/internal/compress"
 	"twig/internal/hashing"
+	"twig/internal/metrics"
 	"twig/internal/objects"
 )
 
@@ -52,12 +53,18 @@ func (s *Store) Has(hash string) (bool, error) {
 // Put does nothing further (this is the dedup point). Either way, it
 // returns the hash.
 func (s *Store) Put(content []byte) (string, error) {
+	if metrics.Enabled {
+		metrics.StorePutCalls.Add(1)
+	}
 	hash := hashing.Hash(content)
 	exists, err := s.Has(hash)
 	if err != nil {
 		return "", err
 	}
 	if exists {
+		if metrics.Enabled {
+			metrics.StorePutDedupSkips.Add(1)
+		}
 		return hash, nil
 	}
 

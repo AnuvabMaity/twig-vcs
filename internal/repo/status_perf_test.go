@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"twig/internal/ingest"
+	"twig/internal/metrics"
 )
 
 func TestStatusPerfNoRehash(t *testing.T) {
@@ -72,8 +72,8 @@ func TestStatusPerfNoRehash(t *testing.T) {
 		t.Fatalf("Commit failed: %v", err)
 	}
 
-	// Reset HashFileCallCount to zero
-	ingest.HashFileCallCount.Store(0)
+	// Reset HashFileCalls to zero
+	metrics.HashFileCalls.Store(0)
 
 	// Call Status() on the unmodified repository
 	statusEntries, err := r.Status()
@@ -81,12 +81,12 @@ func TestStatusPerfNoRehash(t *testing.T) {
 		t.Fatalf("Status failed: %v", err)
 	}
 
-	// Assert that HashFileCallCount is zero.
+	// Assert that HashFileCalls is zero.
 	// We check for a zero call count rather than a fast execution time because wall-clock
 	// measurements are subject to environment noise and CPU scheduling, making them flaky.
 	// Asserting a zero call count is a deterministic proof that the size/mtime fast-path logic
 	// successfully bypassed reading and chunking the file contents.
-	callCount := ingest.HashFileCallCount.Load()
+	callCount := metrics.HashFileCalls.Load()
 	if callCount != 0 {
 		t.Errorf("expected 0 HashFile calls for unmodified repo, got %d", callCount)
 	}
@@ -109,7 +109,7 @@ func TestStatusPerfNoRehash(t *testing.T) {
 	}
 
 	// Reset call count again
-	ingest.HashFileCallCount.Store(0)
+	metrics.HashFileCalls.Store(0)
 
 	// Call Status() again
 	_, err = r.Status()
@@ -117,8 +117,8 @@ func TestStatusPerfNoRehash(t *testing.T) {
 		t.Fatalf("Status failed: %v", err)
 	}
 
-	// Assert HashFileCallCount is exactly 1 (only the modified file should trigger content rehashing).
-	callCount = ingest.HashFileCallCount.Load()
+	// Assert HashFileCalls is exactly 1 (only the modified file should trigger content rehashing).
+	callCount = metrics.HashFileCalls.Load()
 	if callCount != 1 {
 		t.Errorf("expected exactly 1 HashFile call after modifying one file, got %d", callCount)
 	}

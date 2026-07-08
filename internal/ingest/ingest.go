@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sync/atomic"
 
 	"twig/internal/chunker"
 	"twig/internal/hashing"
+	"twig/internal/metrics"
 	"twig/internal/objects"
 	"twig/internal/store"
 )
@@ -150,16 +150,14 @@ func Reconstruct(s *store.Store, hash string, objType objects.ObjectType, w io.W
 	}
 }
 
-// HashFileCallCount is for test instrumentation only — never read or relied upon by production
-// code paths. Incremented on every call to HashFile.
-var HashFileCallCount atomic.Int64
-
 // HashFile computes what IngestFile would produce (hash and object type)
 // for the file at path, without writing anything to the store. Used by
 // read-only commands (status) that need to detect content changes
 // without creating objects for content that may never be committed.
 func HashFile(path string) (hash string, objType objects.ObjectType, err error) {
-	HashFileCallCount.Add(1)
+	if metrics.Enabled {
+		metrics.HashFileCalls.Add(1)
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to open file %s: %w", path, err)

@@ -19,6 +19,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  check integrity Validate repository structural consistency and object hashes")
 	fmt.Fprintln(os.Stderr, "  viz chunks      Display a visual map of chunk sharing between versions")
 	fmt.Fprintln(os.Stderr, "  viz store-stats Display reachable vs orphaned storage counts")
+	fmt.Fprintln(os.Stderr, "  time            Time and monitor Twig command runs with internal counters")
 }
 
 func main() {
@@ -72,6 +73,8 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Unknown subcommand: bench viz %s\n", sub)
 			os.Exit(1)
 		}
+	case "time":
+		runBenchTime(os.Args[2:])
 	default:
 		printUsage()
 		os.Exit(1)

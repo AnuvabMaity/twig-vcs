@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+
+	"twig/internal/metrics"
 )
 
 func printUsage() {
@@ -22,6 +25,15 @@ func printUsage() {
 }
 
 func main() {
+	if os.Getenv("TWIG_METRICS") == "1" {
+		defer func() {
+			snapshot := metrics.Snapshot()
+			if data, err := json.Marshal(snapshot); err == nil {
+				fmt.Fprintf(os.Stderr, "\nTWIG_METRICS_DUMP:%s\n", string(data))
+			}
+		}()
+	}
+
 	if len(os.Args) < 2 {
 		printUsage()
 		os.Exit(1)

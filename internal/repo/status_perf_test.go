@@ -12,6 +12,9 @@ import (
 )
 
 func TestStatusPerfNoRehash(t *testing.T) {
+	metrics.Enabled = true
+	defer func() { metrics.Enabled = false }()
+
 	tmpDir, err := os.MkdirTemp("", "twig-status-perf-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)

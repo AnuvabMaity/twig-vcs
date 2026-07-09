@@ -14,12 +14,18 @@ import (
 func printUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: bench <command> [<args>]")
 	fmt.Fprintln(os.Stderr, "Available commands:")
-	fmt.Fprintln(os.Stderr, "  cat index       Display the staging index contents")
-	fmt.Fprintln(os.Stderr, "  cat object      Display a decompressed CBOR object or raw chunk")
-	fmt.Fprintln(os.Stderr, "  check integrity Validate repository structural consistency and object hashes")
-	fmt.Fprintln(os.Stderr, "  viz chunks      Display a visual map of chunk sharing between versions")
-	fmt.Fprintln(os.Stderr, "  viz store-stats Display reachable vs orphaned storage counts")
-	fmt.Fprintln(os.Stderr, "  time            Time and monitor Twig command runs with internal counters")
+	fmt.Fprintln(os.Stderr, "  cat index              Display the staging index contents")
+	fmt.Fprintln(os.Stderr, "  cat object             Display a decompressed CBOR object or raw chunk")
+	fmt.Fprintln(os.Stderr, "  check integrity        Validate repository structural consistency and object hashes")
+	fmt.Fprintln(os.Stderr, "  viz chunks             Display a visual map of chunk sharing between versions")
+	fmt.Fprintln(os.Stderr, "  viz store-stats        Display reachable vs orphaned storage counts")
+	fmt.Fprintln(os.Stderr, "  time                   Time and monitor Twig command runs with internal counters")
+	fmt.Fprintln(os.Stderr, "  gen corpus             Generate synthetic files with realistic redundancy")
+	fmt.Fprintln(os.Stderr, "  gen repo               Spin up a fully populated mock repository")
+	fmt.Fprintln(os.Stderr, "  gen conflict-scenario  Generate a repository with branch conflict scenarios")
+	fmt.Fprintln(os.Stderr, "  gen dataset            Curate SQLite/Assets/JPEGs benchmark datasets")
+	fmt.Fprintln(os.Stderr, "  mutate                 Apply controlled byte mutations to a file")
+	fmt.Fprintln(os.Stderr, "  run-benchmark          Run execution speed and database size benchmarks")
 }
 
 func main() {
@@ -73,6 +79,29 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Unknown subcommand: bench viz %s\n", sub)
 			os.Exit(1)
 		}
+	case "gen":
+		if len(os.Args) < 3 {
+			fmt.Fprintln(os.Stderr, "Usage: bench gen <corpus|repo|conflict-scenario|dataset> [<args>]")
+			os.Exit(1)
+		}
+		sub := os.Args[2]
+		switch sub {
+		case "corpus":
+			runGenCorpus(os.Args[3:])
+		case "repo":
+			runGenRepo(os.Args[3:])
+		case "conflict-scenario":
+			runGenConflictScenario(os.Args[3:])
+		case "dataset":
+			runGenDataset(os.Args[3:])
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown subcommand: bench gen %s\n", sub)
+			os.Exit(1)
+		}
+	case "mutate":
+		runMutate(os.Args[2:])
+	case "run-benchmark":
+		runBenchmark(os.Args[2:])
 	case "time":
 		runBenchTime(os.Args[2:])
 	default:

@@ -19,6 +19,8 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  check integrity        Validate repository structural consistency and object hashes")
 	fmt.Fprintln(os.Stderr, "  viz chunks             Display a visual map of chunk sharing between versions")
 	fmt.Fprintln(os.Stderr, "  viz store-stats        Display reachable vs orphaned storage counts")
+	fmt.Fprintln(os.Stderr, "  viz commit-graph       Render the commit history dependency graph")
+	fmt.Fprintln(os.Stderr, "  viz tree               Display a hierarchical file and object chunk tree")
 	fmt.Fprintln(os.Stderr, "  time                   Time and monitor Twig command runs with internal counters")
 	fmt.Fprintln(os.Stderr, "  gen corpus             Generate synthetic files with realistic redundancy")
 	fmt.Fprintln(os.Stderr, "  gen repo               Spin up a fully populated mock repository")
@@ -26,6 +28,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  gen dataset            Curate SQLite/Assets/JPEGs benchmark datasets")
 	fmt.Fprintln(os.Stderr, "  mutate                 Apply controlled byte mutations to a file")
 	fmt.Fprintln(os.Stderr, "  run-benchmark          Run execution speed and database size benchmarks")
+	fmt.Fprintln(os.Stderr, "  demo <scenario>        Run a narrated stakeholder presentation walkthrough")
 }
 
 func main() {
@@ -66,7 +69,7 @@ func main() {
 		}
 	case "viz":
 		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, "Usage: bench viz <chunks|store-stats> [<args>]")
+			fmt.Fprintln(os.Stderr, "Usage: bench viz <chunks|store-stats|commit-graph|tree> [<args>]")
 			os.Exit(1)
 		}
 		sub := os.Args[2]
@@ -75,6 +78,10 @@ func main() {
 			runVizChunks(os.Args[3:])
 		case "store-stats":
 			runVizStoreStats(os.Args[3:])
+		case "commit-graph":
+			runVizCommitGraph(os.Args[3:])
+		case "tree":
+			runVizTree(os.Args[3:])
 		default:
 			fmt.Fprintf(os.Stderr, "Unknown subcommand: bench viz %s\n", sub)
 			os.Exit(1)
@@ -102,6 +109,8 @@ func main() {
 		runMutate(os.Args[2:])
 	case "run-benchmark":
 		runBenchmark(os.Args[2:])
+	case "demo":
+		runDemo(os.Args[2:])
 	case "time":
 		runBenchTime(os.Args[2:])
 	default:

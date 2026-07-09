@@ -410,3 +410,338 @@ func runVizStoreStats(args []string) {
 	fmt.Printf("Orphaned Objects (unreferenced): %d (size: %.2f MB)\n", orphansCount, float64(orphansBytes)/(1024*1024))
 	fmt.Printf("Total database disk size:       %.2f MB\n", float64(totalBytes)/(1024*1024))
 }
+
+// runVizCommitGraph implements 'bench viz commit-graph'
+func runVizCommitGraph(args []string) {
+	fs := flag.NewFlagSet("viz commit-graph", flag.ExitOnError)
+	storeDir := fs.String("store", "", "Path to the .twig directory (optional)")
+	format := fs.String("format", "mermaid", "Output format: mermaid, dot")
+	outFile := fs.String("out", "", "File path to write graph to (optional, defaults to stdout)")
+
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing flags: %v\n", err)
+		os.Exit(1)
+	}
+
+	var twigDir string
+	var err error
+	if *storeDir != "" {
+		twigDir = *storeDir
+	} else {
+		twigDir, err = FindTwigDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error discovering repository: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	st := store.Open(twigDir)
+
+	// Collect roots to walk commit graph
+	var roots []string
+	headCommit, err := refs.ResolveHEAD(twigDir)
+	if err == nil && headCommit != "" {
+		roots = append(roots, headCommit)
+	}
+	branches, err := refs.ListBranches(twigDir)
+	if err == nil {
+		for _, b := range branches {
+			commitHash, err := refs.ReadBranch(twigDir, b)
+			if err == nil && commitHash != "" {
+				roots = append(roots, commitHash)
+			}
+		}
+	}
+
+	// Traversal to collect all commits, messages, and parent links
+	type CommitNode struct {
+		Hash    string
+		Message string
+		Parents []string
+	}
+	commits := make(map[string]*CommitNode)
+	var queue []string
+	visited := make(map[string]bool)
+
+	// Seed queue with unique roots
+	for _, root := range roots {
+		if root != "" && !visited[root] {
+			visited[root] = true
+			queue = append(queue, root)
+		}
+	}
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		data, err := st.Get(current)
+		if err != nil {
+			continue
+		}
+
+		var c objects.Commit
+		if err := objects.Decode(data, &c); err != nil {
+			continue
+		}
+
+		// Save node
+		shortMsg := strings.ReplaceAll(c.Message, "\n", " ")
+		if len(shortMsg) > 30 {
+			shortMsg = shortMsg[:27] + "..."
+		}
+		commits[current] = &CommitNode{
+			Hash:    current,
+			Message: shortMsg,
+			Parents: c.Parents,
+		}
+
+		// Enqueue parents
+		for _, p := range c.Parents {
+			if !visited[p] {
+				visited[p] = true
+				queue = append(queue, p)
+			}
+		}
+	}
+
+	// Build output string
+	var sb strings.Builder
+	switch *format {
+	case "dot":
+		sb.WriteString("digraph G {\n")
+		sb.WriteString("  node [shape=box, style=filled, fillcolor=lightblue];\n")
+		// Draw nodes
+		for h, node := range commits {
+			sb.WriteString(fmt.Sprintf("  %q [label=%q];\n", h[:8], fmt.Sprintf("%s\n%s", h[:8], node.Message)))
+		}
+		// Draw edges (Parent -> Child for logical progression flow)
+		for h, node := range commits {
+			for _, p := range node.Parents {
+				sb.WriteString(fmt.Sprintf("  %q -> %q;\n", p[:8], h[:8]))
+			}
+		}
+		sb.WriteString("}\n")
+
+	case "mermaid":
+		sb.WriteString("flowchart TD\n")
+		// Draw nodes
+		for h, node := range commits {
+			sb.WriteString(fmt.Sprintf("  c_%s[\"%s: %s\"]\n", h[:8], h[:8], node.Message))
+		}
+		// Draw edges
+		for h, node := range commits {
+			for _, p := range node.Parents {
+				sb.WriteString(fmt.Sprintf("  c_%s --> c_%s\n", p[:8], h[:8]))
+			}
+		}
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown format: %s. Use mermaid or dot.\n", *format)
+		os.Exit(1)
+	}
+
+	output := sb.String()
+	if *outFile != "" {
+		if err := os.WriteFile(*outFile, []byte(output), 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to write commit graph to file: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Commit graph written to %s\n", *outFile)
+	} else {
+		fmt.Print(output)
+	}
+}
+
+// runVizTree implements 'bench viz tree'
+func runVizTree(args []string) {
+	fs := flag.NewFlagSet("viz tree", flag.ExitOnError)
+	storeDir := fs.String("store", "", "Path to the .twig directory (optional)")
+	chunksOpt := fs.Bool("chunks", false, "Expand assets to list underlying raw chunk hashes inline")
+	format := fs.String("format", "ascii", "Output format: ascii, mermaid")
+
+	var ref string
+	var parseArgs []string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		ref = args[0]
+		parseArgs = args[1:]
+	} else {
+		parseArgs = args
+	}
+
+	if err := fs.Parse(parseArgs); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing flags: %v\n", err)
+		os.Exit(1)
+	}
+
+	if ref == "" {
+		ref = "HEAD"
+	}
+
+	var twigDir string
+	var err error
+	if *storeDir != "" {
+		twigDir = *storeDir
+	} else {
+		twigDir, err = FindTwigDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error discovering repository: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	st := store.Open(twigDir)
+
+	commitHash, err := ResolveRefOrHash(twigDir, ref)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error resolving reference %q: %v\n", ref, err)
+		os.Exit(1)
+	}
+
+	// Retrieve commit object
+	commitData, err := st.Get(commitHash)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load commit: %v\n", err)
+		os.Exit(1)
+	}
+	var c objects.Commit
+	if err := objects.Decode(commitData, &c); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to decode commit: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Tree for Commit: %s (Message: %q)\n\n", commitHash[:8], c.Message)
+
+	if *format == "ascii" {
+		if err := renderASCIITree(st, c.Root, "", *chunksOpt); err != nil {
+			fmt.Fprintf(os.Stderr, "Error rendering tree: %v\n", err)
+			os.Exit(1)
+		}
+	} else if *format == "mermaid" {
+		fmt.Println("flowchart TD")
+		fmt.Printf("  root[\"Root Tree (%s)\"]\n", c.Root[:8])
+		if err := renderMermaidTree(st, c.Root, "root", *chunksOpt); err != nil {
+			fmt.Fprintf(os.Stderr, "Error rendering tree: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "Unknown format %q. Use ascii or mermaid.\n", *format)
+		os.Exit(1)
+	}
+}
+
+func renderASCIITree(st *store.Store, treeHash string, prefix string, showChunks bool) error {
+	data, err := st.Get(treeHash)
+	if err != nil {
+		return fmt.Errorf("failed to load tree %s: %w", treeHash, err)
+	}
+
+	var t objects.Tree
+	if err := objects.Decode(data, &t); err != nil {
+		return fmt.Errorf("failed to decode tree %s: %w", treeHash, err)
+	}
+
+	for i, entry := range t.Entries {
+		isLast := i == len(t.Entries)-1
+		connector := "├── "
+		nextPrefix := prefix + "│   "
+		if isLast {
+			connector = "└── "
+			nextPrefix = prefix + "    "
+		}
+
+		switch entry.Type {
+		case objects.TypeTree:
+			fmt.Printf("%s%s%s/ (Tree, hash: %s)\n", prefix, connector, entry.Name, entry.Hash[:8])
+			if err := renderASCIITree(st, entry.Hash, nextPrefix, showChunks); err != nil {
+				return err
+			}
+		case objects.TypeBlob:
+			sizeStr := "unknown size"
+			if blobData, err := st.Get(entry.Hash); err == nil {
+				var b objects.Blob
+				if err := objects.Decode(blobData, &b); err == nil {
+					sizeStr = fmt.Sprintf("%.2f KB", float64(len(b.Data))/1024)
+				}
+			}
+			fmt.Printf("%s%s%s (Blob, %s, hash: %s)\n", prefix, connector, entry.Name, sizeStr, entry.Hash[:8])
+		case objects.TypeAsset:
+			sizeStr := "unknown size"
+			var chunks []objects.ChunkRef
+			if assetData, err := st.Get(entry.Hash); err == nil {
+				var a objects.Asset
+				if err := objects.Decode(assetData, &a); err == nil {
+					sizeStr = fmt.Sprintf("%.2f MB", float64(a.Size)/(1024*1024))
+					chunks = a.Chunks
+				}
+			}
+			fmt.Printf("%s%s%s (Asset, %s, hash: %s)\n", prefix, connector, entry.Name, sizeStr, entry.Hash[:8])
+			if showChunks && len(chunks) > 0 {
+				for j, chunk := range chunks {
+					chunkIsLast := j == len(chunks)-1
+					chunkConnector := "├── [chunk] "
+					if chunkIsLast {
+						chunkConnector = "└── [chunk] "
+					}
+					fmt.Printf("%s%s%s (size: %.2f KB)\n", nextPrefix, chunkConnector, chunk.Hash[:8], float64(chunk.Size)/1024)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func renderMermaidTree(st *store.Store, treeHash string, parentID string, showChunks bool) error {
+	data, err := st.Get(treeHash)
+	if err != nil {
+		return err
+	}
+
+	var t objects.Tree
+	if err := objects.Decode(data, &t); err != nil {
+		return err
+	}
+
+	for _, entry := range t.Entries {
+		nodeID := fmt.Sprintf("n_%s", entry.Hash[:8])
+		switch entry.Type {
+		case objects.TypeTree:
+			fmt.Printf("  %s --> %s\n", parentID, nodeID)
+			fmt.Printf("  %s[\"📂 %s/ (Tree)\"]\n", nodeID, entry.Name)
+			if err := renderMermaidTree(st, entry.Hash, nodeID, showChunks); err != nil {
+				return err
+			}
+		case objects.TypeBlob:
+			sizeStr := "unknown size"
+			if blobData, err := st.Get(entry.Hash); err == nil {
+				var b objects.Blob
+				if err := objects.Decode(blobData, &b); err == nil {
+					sizeStr = fmt.Sprintf("%.2f KB", float64(len(b.Data))/1024)
+				}
+			}
+			fmt.Printf("  %s --> %s\n", parentID, nodeID)
+			fmt.Printf("  %s[\"📄 %s (Blob, %s)\"]\n", nodeID, entry.Name, sizeStr)
+		case objects.TypeAsset:
+			sizeStr := "unknown size"
+			var chunks []objects.ChunkRef
+			if assetData, err := st.Get(entry.Hash); err == nil {
+				var a objects.Asset
+				if err := objects.Decode(assetData, &a); err == nil {
+					sizeStr = fmt.Sprintf("%.2f MB", float64(a.Size)/(1024*1024))
+					chunks = a.Chunks
+				}
+			}
+			fmt.Printf("  %s --> %s\n", parentID, nodeID)
+			fmt.Printf("  %s[\"📦 %s (Asset, %s)\"]\n", nodeID, entry.Name, sizeStr)
+
+			if showChunks && len(chunks) > 0 {
+				for j, chunk := range chunks {
+					chunkNodeID := fmt.Sprintf("c_%s_%d", chunk.Hash[:8], j)
+					fmt.Printf("  %s --> %s\n", nodeID, chunkNodeID)
+					fmt.Printf("  %s[\"🧱 Chunk: %s (%.2f KB)\"]\n", chunkNodeID, chunk.Hash[:8], float64(chunk.Size)/1024)
+				}
+			}
+		}
+	}
+	return nil
+}
+

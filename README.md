@@ -1,4 +1,7 @@
-﻿# Twig VCS
+﻿<h1>
+  <img src="assets/logo.svg" width="60" alt="Twig Logo" style="vertical-align: middle;">
+  Twig
+</h1>
 
 A content-addressable version control system built in Go, designed around **Content-Defined Chunking (CDC)** for efficient storage of large binary files across revisions. Twig provides a Git-like workflow — `init`, `add`, `commit`, `log`, `checkout`, `branch`, `merge` — while storing file data as chunk-deduplicated loose objects rather than git-style packfiles.
 

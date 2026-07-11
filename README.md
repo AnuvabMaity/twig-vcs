@@ -1,38 +1,42 @@
-﻿<h1>
-  <img src="assets/logo.svg" width="60" alt="Twig Logo" style="vertical-align: middle;">
-  Twig
-</h1>
-
-A content-addressable version control system built in Go, designed around **Content-Defined Chunking (CDC)** for efficient storage of large binary files across revisions. Twig provides a Git-like workflow — `init`, `add`, `commit`, `log`, `checkout`, `branch`, `merge` — while storing file data as chunk-deduplicated loose objects rather than git-style packfiles.
-
----
-
-## Table of Contents
-
-- [Design Rationale](#design-rationale)
-- [Architecture Overview](#architecture-overview)
-- [Object Model](#object-model)
-- [On-Disk Layout](#on-disk-layout)
-- [Key Architectural Constants](#key-architectural-constants)
-- [Package Structure](#package-structure)
-- [Building & Running](#building--running)
-- [Command Reference](#command-reference)
-- [Configuration](#configuration)
-- [Merge Strategy](#merge-strategy)
-- [Instrumentation](#instrumentation)
-- [Design Tradeoffs](#design-tradeoffs)
-- [Known Limitations & Future Work](#known-limitations--future-work)
-- [Dependencies](#dependencies)
+﻿<p align="center">
+  <img src="assets/logo.svg" width="140" alt="Twig Logo">
+  <br>
+  <strong>Content-addressable version control system for binary-heavy repositories</strong>
+  <br><br>
+  <a href="https://go.dev/">
+    <img src="https://img.shields.io/badge/go-1.21%2B-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go Version">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-brightgreen?style=flat-square" alt="License: MIT">
+  </a>
+  <a href="#">
+    <img src="https://img.shields.io/badge/build-passing-brightgreen?style=flat-square" alt="Build">
+  </a>
+</p>
 
 ---
 
-## Design Rationale
+## What is Twig?
 
 Standard VCS tools handle binary files poorly. Git stores each revision of a binary asset as a separate compressed blob; Git LFS improves storage but requires external infrastructure. Neither exploits the internal structure of evolving binary files.
 
-Twig uses **FastCDC** (content-defined chunking) to split files into variable-size chunks at content-dependent boundaries. When a file changes, only the chunks whose byte content actually changed need to be written. Chunks whose boundaries and content are unaffected are automatically deduplicated at write time via content addressing.
+Twig uses **FastCDC** (content-defined chunking) to split files into variable-size chunks at content-dependent boundaries. When a file changes, only the chunks that actually changed are written — unchanged chunks are deduplicated automatically across all revisions.
 
-This makes Twig a reasonable fit for repositories that track iteratively-modified binary assets — SQLite databases, game assets, or similar append-heavy workloads. For repositories dominated by small text files or highly compressed data (e.g., JPEGs, MP4s), the deduplication benefit is negligible and Twig offers no advantage over Git.
+This makes Twig a practical fit for repositories that track iteratively-modified binary assets — SQLite databases, game assets, or similar append-heavy workloads. For repositories dominated by small text files or highly compressed data (e.g., JPEGs, MP4s), the deduplication benefit is negligible.
+
+---
+
+## Features
+
+- **Content-Defined Chunking** — files ≥ 16 KB are split by FastCDC; only changed chunks are stored per revision.
+- **Automatic deduplication** — identical chunks across any files or commits are stored exactly once.
+- **Git-like workflow** — `init`, `add`, `commit`, `log`, `status`, `checkout`, `branch`, `merge`.
+- **Three-way merge** — merges against the nearest common ancestor; non-conflicting changes apply automatically.
+- **Conflict resolution** — conflicting files are flagged with `ours`/`theirs` sides; resolved with `twig resolve`.
+- **mtime-aware status** — `status` skips re-hashing files whose size and modification time are unchanged.
+- **Single binary** — no runtime dependencies; builds to a single self-contained executable.
+- **BLAKE3 content addressing** — every stored object is identified by its BLAKE3 hash; integrity is always verifiable.
+- **zstd compression** — all objects are transparently compressed at rest.
 
 ---
 
@@ -43,18 +47,15 @@ Working Directory
        │
        │  twig add
        ▼
-  Staging Index  (.twig/index)
-   (CBOR map: path → {hash, type, size, mtime})
+  Staging Index
        │
        │  twig commit
        ▼
   Tree Objects  ──►  Commit Objects
-  (.twig/objects/)    (.twig/objects/)
        │                    │
        └──────┬─────────────┘
               ▼
     Loose Object Store
-    (content-addressed, zstd-compressed)
     .twig/objects/<hash[:2]>/<hash[2:]>
               │
     ┌─────────┴──────────┐
@@ -63,16 +64,7 @@ Working Directory
   (< 16 KB)          (≥ 16 KB, FastCDC)
 ```
 
----
-
-## Object Model
-
-Twig defines four object types, stored in the same content-addressable object store.
-
-- **Blob** — stores the raw content of a small file (< 16 KB) as a single atomic unit.
-- **Asset** — stores a manifest of ordered chunk references for files ≥ 16 KB; content lives in the chunks, not the manifest itself.
-- **Tree** — represents a directory snapshot as a sorted list of name-to-hash mappings, covering files and nested subdirectories.
-- **Commit** — records a point-in-time snapshot: a root tree hash, zero or more parent commit hashes, author identity, timestamp, and message.
+Files under 16 KB are stored whole. Larger files are split by FastCDC into variable-size chunks; only a manifest of chunk references is stored at the top level. All objects are content-addressed and share the same store.
 
 ---
 
@@ -80,58 +72,17 @@ Twig defines four object types, stored in the same content-addressable object st
 
 ```
 .twig/
-├── HEAD           # symbolic ref ("ref: refs/heads/main") or detached commit hash
-├── VERSION        # format version integer (currently "1")
-├── config         # key=value repository configuration
-├── index          # CBOR-encoded staging area
+├── HEAD           # current branch or detached commit
+├── VERSION        # storage format version
+├── config         # repository configuration
+├── index          # staging area
 ├── MERGE_HEAD     # present only during an active merge
 ├── objects/
-│   └── <xx>/      # 2-character hex fan-out prefix
-│       └── <yy…>  # remaining 62 hex chars; file content is zstd-compressed CBOR
+│   └── <xx>/      # 2-char fan-out prefix
+│       └── <yy…>  # object file (zstd-compressed)
 └── refs/
     └── heads/
-        └── <branch-name>  # plain text file containing the tip commit hash
-```
-
----
-
-## Key Architectural Constants
-
-All of these are defined in a single location: `internal/objects/constants.go`. They must not be duplicated or overridden elsewhere.
-
-| Constant | Value | Purpose |
-|---|---|---|
-| `BlobThreshold` | **16 KB** | Files below this are stored as Blobs; at or above as Assets |
-| `ChunkMinSize` | **64 KB** | Minimum FastCDC chunk size |
-| `ChunkAvgSize` | **256 KB** | Target average FastCDC chunk size |
-| `ChunkMaxSize` | **1 MB** | Maximum FastCDC chunk size |
-| `FormatVersion` | **1** | Written to `.twig/VERSION` on `init` for future migration detection |
-| `DefaultBranchName` | `"main"` | Branch created on `twig init` |
-
-The 64/256/1024 KB chunk parameters are a deliberate tradeoff: smaller averages improve dedup granularity at the cost of more objects and more small I/O operations; larger averages reduce object count but decrease dedup sensitivity. The 256 KB average is a reasonable middle ground for large binary files in the 1–500 MB range.
-
----
-
-## Package Structure
-
-```
-twig/
-├── cmd/
-│   ├── twig/          # CLI entry point; one file per subcommand
-│   └── bench/         # standalone benchmark harness (separate binary)
-└── internal/
-    ├── objects/        # type definitions, canonical CBOR codec, shared constants
-    ├── hashing/        # BLAKE3 wrapper; hash-to-path fan-out derivation
-    ├── compress/       # zstd encode/decode wrappers (singleton encoder/decoder)
-    ├── store/          # loose object store: Put (dedup write), Get, Has
-    ├── chunker/        # FastCDC wrapper with project-configured min/avg/max
-    ├── ingest/         # Blob/Asset dispatch; file reconstruction (Reconstruct)
-    ├── index/          # staging area: Load/Save/Put/Remove/NeedsRehash
-    ├── refs/           # HEAD and branch ref read/write; ListBranches
-    ├── repo/           # high-level orchestration: Add, Commit, Checkout, Status,
-    │                   # Merge, CreateBranch, Log, ResolveConflict, AbortMerge
-    ├── metrics/        # atomic counters; enabled via TWIG_METRICS=1
-    └── smoketest/      # integration smoke tests
+        └── <branch-name>
 ```
 
 ---
@@ -146,11 +97,8 @@ git clone https://github.com/AnuvabMaity/twig
 cd twig
 go build -o twig ./cmd/twig
 
-# Run all tests
+# Run tests
 go test ./...
-
-# Run the linter (requires golangci-lint in PATH)
-golangci-lint run
 ```
 
 The build produces a single self-contained binary with no runtime dependencies.
@@ -211,11 +159,9 @@ Shows the state of every tracked path relative to the staging index and the last
 twig status
 ```
 
-Possible states per file:
-
 | Status | Meaning |
 |---|---|
-| `staged-new` | Staged; not present in the last commit |
+| `staged-new` | Staged; not in the last commit |
 | `staged-modified` | Staged; differs from the last commit |
 | `modified` | Staged, but working copy has changed again since staging |
 | `deleted` | In the index but missing from disk |
@@ -239,7 +185,7 @@ twig checkout a3f8b2c
 
 ### `twig branch [<name>]`
 
-With no arguments, lists all branches with `*` marking the current one. With a name, creates a new branch pointing at the current HEAD commit.
+With no arguments, lists all branches with `*` marking the current one. With a name, creates a new branch at the current commit.
 
 ```bash
 twig branch              # list branches
@@ -250,7 +196,7 @@ twig branch feature-x    # create branch at HEAD
 
 ### `twig merge <branch>`
 
-Merges the named branch into the current branch via a three-way diff. Non-conflicting changes are applied automatically; conflicting files are flagged and require manual resolution.
+Merges the named branch into the current branch. Non-conflicting changes are applied automatically; conflicting files are flagged and require manual resolution.
 
 ```bash
 twig merge feature-x
@@ -269,22 +215,6 @@ Resolves a merge conflict on a specific file by accepting one side. After resolv
 twig resolve ours   assets/model.bin
 twig resolve theirs assets/model.bin
 ```
-
-After resolving all conflicts, run `twig commit -m "..."` to complete the merge.
-
----
-
-### Plumbing Commands
-
-```bash
-# Hash and store a file; print its object hash
-twig hash-object <file>
-
-# Decode and print a stored object by hash
-twig cat-object <hash>
-```
-
-These are low-level tools for inspecting the object store directly, useful for debugging.
 
 ---
 
@@ -305,51 +235,34 @@ user.id = alice
 
 ## Merge Strategy
 
-Twig performs a **three-way merge against the nearest common ancestor**. Non-conflicting changes (modified on only one side) are applied automatically. A conflict is raised when the same path is modified on both sides relative to the ancestor, or when both sides independently add the same path with different content.
+Twig performs a **three-way merge against the nearest common ancestor**. Non-conflicting changes — modified on only one side — are applied automatically. A conflict is raised when the same path is modified on both sides, or when both sides independently add the same path with different content.
 
-Twig does **not** attempt text-level line merging. Every file is treated as an opaque byte sequence. This is a deliberate choice for binary-asset workflows; text files with line-level divergence must be resolved manually.
+Twig does **not** attempt text-level line merging. Every file is treated as an opaque byte sequence. Text files with line-level divergence must be resolved manually with `twig resolve`.
 
 ---
 
 ## Instrumentation
 
-Set `TWIG_METRICS=1` before any command to emit a JSON snapshot of internal operation counters to stderr on exit. Useful for profiling deduplication efficiency and diagnosing unexpected rehash activity.
+Set `TWIG_METRICS=1` to emit a JSON counter snapshot to stderr on exit. Useful for profiling deduplication efficiency.
 
 ```bash
-TWIG_METRICS=1 twig status
+TWIG_METRICS=1 twig add .
 ```
 
 ```json
-TWIG_METRICS_DUMP:{"chunker_invocations":0,"hash_file_calls":0,"store_put_calls":12,"store_put_dedup_skips":5}
+TWIG_METRICS_DUMP:{"chunker_invocations":4,"hash_file_calls":0,"store_put_calls":38,"store_put_dedup_skips":12}
 ```
-
-| Counter | Tracks |
-|---|---|
-| `store_put_calls` | Total calls to `store.Put` |
-| `store_put_dedup_skips` | Writes skipped because the object already exists |
-| `chunker_invocations` | Number of times the FastCDC chunker was invoked |
-| `hash_file_calls` | Number of full file hash computations (triggered by `status`) |
-
-There is no runtime overhead when `TWIG_METRICS` is unset.
-
----
-
-## Design Tradeoffs
-
-**Loose-only object storage.** Every object is stored as its own individual compressed file. There is no pack-file layer. This keeps the implementation straightforward but is adequate only up to a few thousand objects; very large repositories will encounter filesystem performance limits.
-
-**No text-merge.** All files are treated as opaque byte sequences. This is appropriate for binary-asset workflows but means Twig cannot auto-merge text files with line-level divergence.
 
 ---
 
 ## Known Limitations & Future Work
 
-- **Garbage collection** — orphaned loose objects accumulate indefinitely.
-- **Pack-file layer** — loose-only storage will hit filesystem limits in very large repositories.
-- **Remote protocol** — no push/pull; single-machine only.
-- **No `.twigignore`** — `twig add .` stages all regular files without exclusion rules.
-- **No file mode tracking** — execute bits and symlinks are not preserved in the object model.
-- **Text merge** — conflicts on text files require manual resolution; no diff3-style auto-merge.
+- **No garbage collection** — unreferenced objects accumulate and are never reclaimed.
+- **Local-only** — no push/pull/clone; single-machine only.
+- **No `.twigignore`** — `twig add .` stages all files without exclusion rules.
+- **No file mode tracking** — execute bits and symlinks are not preserved.
+- **No text merge** — line-level auto-merge is not supported.
+- **Loose-only storage** — no pack-file consolidation; very large repositories will hit filesystem limits.
 
 ---
 

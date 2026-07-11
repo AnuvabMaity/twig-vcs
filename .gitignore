@@ -43,3 +43,4 @@ go.work.sum
 *.ps1
 .twig/
 .helpers
+*_test*

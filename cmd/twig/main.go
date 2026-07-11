@@ -20,8 +20,6 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  branch       List, create, or delete branches")
 	fmt.Fprintln(os.Stderr, "  merge        Join two or more development histories together")
 	fmt.Fprintln(os.Stderr, "  resolve      Resolve merge conflicts in staging index and working copy")
-	fmt.Fprintln(os.Stderr, "  hash-object  Compute object ID and optionally create a blob from a file")
-	fmt.Fprintln(os.Stderr, "  cat-object   Provide content of repository objects")
 }
 
 func main() {
@@ -39,7 +37,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	switch os.Args[1] {
+	cmd := os.Args[1]
+	if cmd == "--help" || cmd == "-h" || cmd == "help" {
+		printUsage()
+		os.Exit(0)
+	}
+
+	switch cmd {
 	case "init":
 		runInit()
 	case "add":

@@ -73,7 +73,7 @@ func runBenchmark(args []string) {
 		}
 
 		// Run Aggregation
-		summaryFile := filepath.Join("bench", "results", "summary.md")
+		summaryFile := filepath.Join(".out", "bench", "results", "summary.md")
 		fmt.Println("Generating aggregation summary table...")
 		if err := aggregateResults(*outDir, summaryFile); err != nil {
 			fmt.Fprintf(os.Stderr, "Aggregation failed: %v\n", err)

@@ -38,6 +38,11 @@ func main() {
 	}
 
 	cmd := os.Args[1]
+	if cmd == "--help" || cmd == "-h" || cmd == "help" {
+		printUsage()
+		os.Exit(0)
+	}
+
 	switch cmd {
 	case "cat":
 		if len(os.Args) < 3 {
@@ -45,6 +50,10 @@ func main() {
 			os.Exit(1)
 		}
 		sub := os.Args[2]
+		if sub == "--help" || sub == "-h" || sub == "help" {
+			fmt.Fprintln(os.Stderr, "Usage: bench cat <index|object> [<args>]")
+			os.Exit(0)
+		}
 		switch sub {
 		case "index":
 			runCatIndex(os.Args[3:])
@@ -60,6 +69,10 @@ func main() {
 			os.Exit(1)
 		}
 		sub := os.Args[2]
+		if sub == "--help" || sub == "-h" || sub == "help" {
+			fmt.Fprintln(os.Stderr, "Usage: bench check <integrity> [<args>]")
+			os.Exit(0)
+		}
 		switch sub {
 		case "integrity":
 			runCheckIntegrity(os.Args[3:])
@@ -73,6 +86,10 @@ func main() {
 			os.Exit(1)
 		}
 		sub := os.Args[2]
+		if sub == "--help" || sub == "-h" || sub == "help" {
+			fmt.Fprintln(os.Stderr, "Usage: bench viz <chunks|store-stats|commit-graph|tree> [<args>]")
+			os.Exit(0)
+		}
 		switch sub {
 		case "chunks":
 			runVizChunks(os.Args[3:])
@@ -92,6 +109,10 @@ func main() {
 			os.Exit(1)
 		}
 		sub := os.Args[2]
+		if sub == "--help" || sub == "-h" || sub == "help" {
+			fmt.Fprintln(os.Stderr, "Usage: bench gen <corpus|repo|conflict-scenario|dataset> [<args>]")
+			os.Exit(0)
+		}
 		switch sub {
 		case "corpus":
 			runGenCorpus(os.Args[3:])

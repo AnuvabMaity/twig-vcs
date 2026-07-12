@@ -93,7 +93,7 @@ func runVizChunks(args []string) {
 
 	// If both are blobs, it's just a single chunk comparison
 	if oldType == objects.TypeBlob && newType == objects.TypeBlob {
-		fmt.Printf("File: %s (Type: Blob, Size < 16KB)\n", *filePath)
+		fmt.Printf("File: %s (Type: Blob, Size < 64KB)\n", *filePath)
 		if oldFileHash == newFileHash {
 			fmt.Println("Dedup ratio: 100% (file contents are identical)")
 			fmt.Println("[●]")
@@ -744,4 +744,3 @@ func renderMermaidTree(st *store.Store, treeHash string, parentID string, showCh
 	}
 	return nil
 }
-

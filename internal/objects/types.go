@@ -6,9 +6,9 @@ import "sort"
 type ObjectType string
 
 const (
-	// TypeBlob represents a basic file data object (under 16KB).
+	// TypeBlob represents a basic file data object (under 64KB).
 	TypeBlob ObjectType = "blob"
-	// TypeAsset represents a chunked file data object (16KB or larger).
+	// TypeAsset represents a chunked file data object (64KB or larger).
 	TypeAsset ObjectType = "asset"
 	// TypeTree represents a directory listing object.
 	TypeTree ObjectType = "tree"

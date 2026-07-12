@@ -10,8 +10,8 @@ const (
 	ChunkMaxSize = 1024 * 1024 // 1 MB
 )
 
-// BlobThreshold defines the size boundary (16 KB) for storing files as Assets vs Blobs.
-const BlobThreshold = 16 * 1024 // 16 KB
+// BlobThreshold defines the size boundary for storing files as Assets vs Blobs.
+const BlobThreshold = ChunkMinSize // 64 KB
 
 const (
 	DefaultTwigDir    = ".twig"   // repository metadata directory name (e.g. ".twig").

@@ -30,7 +30,7 @@ func runDemo(args []string) {
 	}
 
 	fmt.Println("================================================================================")
-	fmt.Println("              TWIG VCS — STAKEHOLDER DEMO: DEDUP-STORY                  ")
+	fmt.Println("              TWIG VCS — LIVE DEMO: DEDUP-STORY                  ")
 	fmt.Println("================================================================================")
 	fmt.Println("This narrated walkthrough demonstrates how Twig's Content-Defined Chunking (CDC)")
 	fmt.Println("achieves massive storage deduplication compared to whole-file storage systems.")
@@ -59,7 +59,7 @@ func runDemo(args []string) {
 	_ = os.WriteFile(configPath, []byte("user.id=demo-presenter\n"), 0644)
 
 	fmt.Println("\n[Status] Fresh Twig repository initialized at .out/demo_repo.")
-	
+
 	waitDemoKeypress("Step 1: Create and commit an initial 5.00 MB design file...")
 
 	// Generate 5MB redundant file

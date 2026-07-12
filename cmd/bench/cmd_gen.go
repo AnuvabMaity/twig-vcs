@@ -40,17 +40,17 @@ func runGenCorpus(args []string) {
 		var targetSize int
 		switch *profile {
 		case "small":
-			// 100B to 15KB (mostly Blobs)
-			targetSize = rng.Intn(15*1024-100) + 100
+			// 100B to 63KB (mostly Blobs)
+			targetSize = rng.Intn(63*1024-100) + 100
 		case "large":
-			// 16KB to 1MB (mostly Assets)
-			targetSize = rng.Intn(1024*1024-16*1024) + 16*1024
+			// 64KB to 1MB (mostly Assets)
+			targetSize = rng.Intn(1024*1024-64*1024) + 64*1024
 		case "mixed":
 			// 60% small, 40% large
 			if rng.Float64() < 0.6 {
-				targetSize = rng.Intn(15*1024-100) + 100
+				targetSize = rng.Intn(63*1024-100) + 100
 			} else {
-				targetSize = rng.Intn(1024*1024-16*1024) + 16*1024
+				targetSize = rng.Intn(1024*1024-64*1024) + 64*1024
 			}
 		default:
 			fmt.Fprintf(os.Stderr, "Unknown profile: %s\n", *profile)
@@ -400,14 +400,14 @@ func generateRedundantBytes(rng *rand.Rand, targetSize int) []byte {
 func getProfileSize(rng *rand.Rand, profile string) int {
 	switch profile {
 	case "small":
-		return rng.Intn(15*1024-100) + 100
+		return rng.Intn(63*1024-100) + 100
 	case "large":
-		return rng.Intn(1024*1024-16*1024) + 16*1024
+		return rng.Intn(1024*1024-64*1024) + 64*1024
 	case "mixed":
 		if rng.Float64() < 0.6 {
-			return rng.Intn(15*1024-100) + 100
+			return rng.Intn(63*1024-100) + 100
 		}
-		return rng.Intn(1024*1024-16*1024) + 16*1024
+		return rng.Intn(1024*1024-64*1024) + 64*1024
 	default:
 		return 10 * 1024
 	}

@@ -1,4 +1,4 @@
-﻿<p align="center">
+<p align="center">
   <img src="assets/logo.svg" width="140" alt="Twig Logo">
   <br>
   <strong>Content-addressable version control system for binary-heavy repositories</strong>
@@ -60,8 +60,8 @@ Working Directory
               │
     ┌─────────┴──────────┐
     │                    │
-  Blob               Asset + Chunks
-  (< 16 KB)          (≥ 16 KB, FastCDC)
+   Blob               Asset + Chunks
+   (< 16 KB)          (≥ 16 KB, FastCDC)
 ```
 
 Files under 16 KB are stored whole. Larger files are split by FastCDC into variable-size chunks; only a manifest of chunk references is stored at the top level. All objects are content-addressed and share the same store.

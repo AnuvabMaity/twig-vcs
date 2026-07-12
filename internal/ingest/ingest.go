@@ -70,7 +70,7 @@ func IngestFile(s *store.Store, path string) (string, objects.ObjectType, error)
 	}
 
 	size := fi.Size()
-	// Boundary is >= (16KB or larger is stored as an Asset, under 16KB is a Blob).
+	// Boundary is >= (64KB or larger is stored as an Asset, under 64KB is a Blob).
 	if size >= int64(objects.BlobThreshold) {
 		hash, err := BuildAsset(s, file)
 		if err != nil {
@@ -170,7 +170,7 @@ func HashFile(path string) (hash string, objType objects.ObjectType, err error) 
 	}
 
 	size := fi.Size()
-	// Boundary is >= (16KB or larger is stored as an Asset, under 16KB is a Blob).
+	// Boundary is >= (64KB or larger is stored as an Asset, under 64KB is a Blob).
 	if size >= int64(objects.BlobThreshold) {
 		chunks, err := chunker.Split(file)
 		if err != nil {
